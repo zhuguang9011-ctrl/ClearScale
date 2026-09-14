@@ -55,6 +55,12 @@
         <select id="format"><option value="png">PNG · 无损高清</option><option value="jpg">JPG · 文件更小</option><option value="webp">WebP · 高压缩率</option></select>
       </fieldset>
 
+      <fieldset><legend>图片优化</legend>
+        <label class="toggle-row"><span><strong>自动降噪</strong><small>减少颗粒和彩色杂点</small></span><input type="checkbox" id="denoise" checked><b></b></label>
+        <p class="hint">色泽均匀优化（保留自然光影）</p>
+        <select id="evenness"><option value="off">关闭</option><option value="light" selected>轻度 · 保留更多纹理</option><option value="standard">标准 · 加强表面平滑</option></select>
+        <p class="hint">减轻局部杂色，不自动消除大面积光照差异。</p>
+      </fieldset>
       <fieldset><legend>增强质量</legend>
         <label class="toggle-row"><span><strong>极致细节模式</strong><small>速度较慢，适合重要图片</small></span><input type="checkbox" id="tta"><b></b></label>
       </fieldset>

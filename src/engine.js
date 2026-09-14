@@ -16,7 +16,9 @@ function sanitizeOptions(options = {}) {
     scale: VALID_SCALES.has(scale) ? scale : 4,
     format: VALID_FORMATS.has(format) ? format : 'png',
     model,
-    tta: Boolean(options.tta)
+    tta: Boolean(options.tta),
+    denoise: options.denoise !== false,
+    evenness: ['off', 'light', 'standard'].includes(options.evenness) ? options.evenness : 'light'
   };
 }
 
@@ -36,10 +38,10 @@ function makeEngineArgs(inputPath, outputPath, modelDirectory, options = {}) {
   const args = [
     '-i', inputPath,
     '-o', outputPath,
-    '-s', String(clean.scale),
+    '-s', '4',
     '-m', modelDirectory,
     '-n', clean.model,
-    '-f', clean.format,
+    '-f', 'png',
     '-v'
   ];
   if (clean.tta) args.push('-x');

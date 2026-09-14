@@ -27,10 +27,11 @@ jobs:
       - uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.0.0
-          name: ClearScale v1.0.0
+          tag_name: v1.1.0
+          target_commitish: ${{ github.sha }}
+          name: ClearScale v1.1.0
           body: |
-            Windows AI 图片高清放大工具首个可用版本。
+            新增自动降噪、局部色泽均匀优化，修正 2×/3× 分块错位。
             包含一键安装版（文件名带 Setup）和绿色免安装版。
           files: dist/*.exe
       - uses: softprops/action-gh-release@v2

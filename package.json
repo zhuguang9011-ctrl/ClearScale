@@ -1,6 +1,6 @@
 {
   "name": "clearscale",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "本地 AI 图片高清放大桌面工具",
   "main": "src/main.js",
   "author": "zhuguang9011-ctrl",
@@ -12,6 +12,7 @@
     "engine:win": "node scripts/prepare-engine.js",
     "dist:win": "npm run engine:win && electron-builder --win nsis portable --publish never"
   },
+  "dependencies": { "sharp": "0.34.3" },
   "devDependencies": {
     "electron": "32.3.3",
     "electron-builder": "25.1.8"

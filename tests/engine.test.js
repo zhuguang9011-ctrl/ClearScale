@@ -11,7 +11,7 @@ test('只接受支持的图片格式', () => {
 
 test('清洗不可信设置', () => {
   assert.deepEqual(sanitizeOptions({ scale: 99, format: 'exe', model: 'bad' }), {
-    scale: 4, format: 'png', model: 'realesrgan-x4plus', tta: false
+    scale: 4, format: 'png', model: 'realesrgan-x4plus', tta: false, denoise: true, evenness: 'light'
   });
 });
 
@@ -21,5 +21,5 @@ test('生成不会覆盖原文件的输出名', () => {
 
 test('生成 Real-ESRGAN 安全参数数组', () => {
   const args = makeEngineArgs('input file.jpg', 'output.png', 'models', { scale: 3, model: 'anime', tta: true });
-  assert.deepEqual(args, ['-i','input file.jpg','-o','output.png','-s','3','-m','models','-n','realesrgan-x4plus-anime','-f','png','-v','-x']);
+  assert.deepEqual(args, ['-i','input file.jpg','-o','output.png','-s','4','-m','models','-n','realesrgan-x4plus-anime','-f','png','-v','-x']);
 });

@@ -79,6 +79,8 @@ $('startButton').addEventListener('click', async () => {
         model: document.querySelector('input[name="model"]:checked').value,
         format: $('format').value,
         tta: $('tta').checked
+        ,denoise: $('denoise').checked,
+        evenness: $('evenness').value
       }
     });
     state.results = result.results;

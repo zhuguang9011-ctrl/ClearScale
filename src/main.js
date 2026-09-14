@@ -3,11 +3,27 @@ const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+const os = require('node:os');
+const { Worker } = require('node:worker_threads');
 const { isSupportedImage, makeEngineArgs, makeOutputPath, sanitizeOptions } = require('./engine');
 
 let mainWindow;
 let runningProcess = null;
 let cancelled = false;
+let busy = false;
+let imageWorker = null;
+function processImage(action, args) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(path.join(__dirname, 'image-worker.js'), { workerData: { action, args } });
+    imageWorker = worker;
+    worker.on('message', value => resolve(value.result));
+    worker.on('error', reject);
+    worker.on('exit', code => {
+      if (imageWorker === worker) imageWorker = null;
+      if (code !== 0 || cancelled) reject(new Error(cancelled ? '任务已取消' : '图像优化失败'));
+    });
+  });
+}
 
 function projectRoot() {
   return app.isPackaged ? process.resourcesPath : path.join(__dirname, '..');
@@ -71,11 +87,12 @@ ipcMain.handle('engine:status', () => {
 ipcMain.handle('upscale:cancel', () => {
   cancelled = true;
   if (runningProcess) runningProcess.kill();
+  if (imageWorker) imageWorker.terminate();
   return true;
 });
 
 ipcMain.handle('upscale:start', async (_, payload) => {
-  if (runningProcess) throw new Error('已有任务正在运行');
+  if (busy) throw new Error('已有任务正在运行');
   const files = (payload.files || []).filter(isSupportedImage);
   if (!files.length) throw new Error('请先选择 JPG、PNG 或 WebP 图片');
   if (!payload.outputDirectory || !fs.existsSync(payload.outputDirectory)) throw new Error('请选择有效的导出文件夹');
@@ -88,31 +105,49 @@ ipcMain.handle('upscale:start', async (_, payload) => {
   cancelled = false;
   const options = sanitizeOptions(payload.options);
   const results = [];
+  busy = true;
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'clearscale-'));
+  try {
 
   for (let index = 0; index < files.length; index += 1) {
     if (cancelled) break;
     const input = files[index];
-    const output = makeOutputPath(input, payload.outputDirectory, options);
+    let output = makeOutputPath(input, payload.outputDirectory, options);
+    const parsed = path.parse(output);
+    for (let n = 1; fs.existsSync(output); n++) output = path.join(parsed.dir, parsed.name + '_' + n + parsed.ext);
+    const prepared = path.join(temp, 'prepared.png');
+    const rendered = path.join(temp, 'rendered.png');
+    fs.rmSync(rendered, { force: true });
     mainWindow.webContents.send('upscale:progress', {
       index, total: files.length, percent: Math.round((index / files.length) * 100),
-      message: `正在处理 ${path.basename(input)}`
+      message: `降噪与色泽优化：${path.basename(input)}`
     });
 
+    await processImage('prepare', [input, prepared, options]);
+    if (cancelled) break;
+    mainWindow.webContents.send('upscale:progress', { percent: Math.round(index / files.length * 100), message: 'AI 高清放大中…' });
     await new Promise((resolve, reject) => {
-      const args = makeEngineArgs(input, output, engine.models, options);
+      const args = makeEngineArgs(prepared, rendered, engine.models, options);
       runningProcess = spawn(engine.executable, args, { windowsHide: true });
       let errorText = '';
       runningProcess.stderr.on('data', data => { errorText += data.toString(); });
-      runningProcess.on('error', reject);
+      runningProcess.on('error', error => { runningProcess = null; reject(error); });
       runningProcess.on('close', code => {
         runningProcess = null;
         if (cancelled) return resolve();
-        if (code === 0 && fs.existsSync(output)) return resolve();
+        if (code === 0 && fs.existsSync(rendered)) return resolve();
         reject(new Error(errorText.trim() || `处理失败，错误代码 ${code}`));
       });
     });
 
-    if (!cancelled) results.push({ input, output, outputUrl: pathToFileURL(output).href });
+    if (!cancelled) {
+      const finalTemp = path.join(temp, 'final.' + options.format);
+      await processImage('finish', [input, prepared, rendered, finalTemp, options]);
+      if (!cancelled) {
+        fs.copyFileSync(finalTemp, output, fs.constants.COPYFILE_EXCL);
+        results.push({ input, output, outputUrl: pathToFileURL(output).href });
+      }
+    }
   }
 
   mainWindow.webContents.send('upscale:progress', {
@@ -121,4 +156,8 @@ ipcMain.handle('upscale:start', async (_, payload) => {
     message: cancelled ? '任务已取消' : '全部处理完成'
   });
   return { cancelled, results };
+  } finally {
+    busy = false;
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
 });
