@@ -11,7 +11,7 @@ const MODELS = {
 function sanitizeOptions(options = {}) {
   const scale = Number(options.scale);
   const format = String(options.format || 'png').toLowerCase();
-  const model = MODELS[options.model] || MODELS.general;
+  const model = MODELS[options.model] || (Object.values(MODELS).includes(options.model) ? options.model : MODELS.general);
   return {
     scale: VALID_SCALES.has(scale) ? scale : 4,
     format: VALID_FORMATS.has(format) ? format : 'png',
