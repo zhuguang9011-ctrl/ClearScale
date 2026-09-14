@@ -25,6 +25,15 @@ jobs:
           name: ClearScale-Windows
           path: dist/*.exe
       - uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: v1.0.0
+          name: ClearScale v1.0.0
+          body: |
+            Windows AI 图片高清放大工具首个可用版本。
+            包含一键安装版（文件名带 Setup）和绿色免安装版。
+          files: dist/*.exe
+      - uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/v')
         with:
           files: dist/*.exe
