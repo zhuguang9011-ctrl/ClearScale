@@ -1,5 +1,9 @@
 # Finegrain 双击启动包（测试版）
 
+开发分支预览修复：使用 Gradio 自带双图画廊显示原图和结果，点击图片放大查看；
+输出预览缓存使用 PNG，避免额外 WebP 有损压缩。处理异常直接显示错误，不再返回空结果。
+此修改只针对结果显示与错误报告，不代表材质效果改善。
+
 不需要 ComfyUI 或 Pinokio。首次会自动下载独立 Python、PyTorch、Finegrain 源码与模型。
 需要 Windows 10/11 64 位、NVIDIA 显卡、可访问 GitHub / PyTorch / Hugging Face 的网络；建议预留至少 20GB。
 

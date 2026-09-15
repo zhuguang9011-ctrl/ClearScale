@@ -35,7 +35,9 @@ or generated customer samples are committed to this repository.
 
 - Reliable material enhancement without hallucinated structure, changed colour or waxy surfaces.
 - Real GPU inference validation on the user's 5060 Ti 8 GB.
-- Finegrain's separate Gradio result-preview error; ClearScale preview messaging is a different code path.
+- Finegrain's preview now uses a native two-image Gradio gallery instead of the custom slider.
+  Result-wrapper/API-cache regression passes locally with generated test images; this does not prove
+  the cause of the original user's failure or validate actual model inference.
 - Full desktop interaction validation for this new mode.
 
 Do not replace the installed version or label this branch production-ready based only on unit tests.
