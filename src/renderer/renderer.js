@@ -74,6 +74,7 @@ document.querySelectorAll('#scaleGroup button').forEach(button => button.addEven
 
 $('startButton').addEventListener('click', async () => {
   const refining = $('processMode').value === 'refine';
+  const cleaning = $('processMode').value === 'surface';
   if (refining && (state.files.length !== 1 || !state.rect)) return alert('局部精修请只选择一张图片，并框选产品区域');
   state.running = true;
   lockControls(true);
@@ -82,7 +83,7 @@ $('startButton').addEventListener('click', async () => {
   $('progressCard').classList.remove('hidden');
   $('openFolderButton').classList.add('hidden');
   try {
-    const result = refining ? await window.clearScale.refine({
+    const result = cleaning ? await window.clearScale.surface({ files: state.files, outputDirectory: state.outputDirectory, strength: Number($('surfaceStrength').value) }) : refining ? await window.clearScale.refine({
       file: state.files[0], outputDirectory: state.outputDirectory,
       options: { checkpoint: $('checkpoint').value, preset: $('material').value, strength: Number($('strength').value), scale: Number($('refineScale').value), rect: state.rect }
     }) : await window.clearScale.start({
@@ -101,7 +102,9 @@ $('startButton').addEventListener('click', async () => {
     if (state.results.length) {
       if (refining) { $('regionCanvas').classList.add('hidden'); $('beforeLayer').style.right = '50%'; $('divider').classList.remove('hidden'); }
       afterImage.src = state.results[0].outputUrl;
-      $('fileMeta').textContent = result.cancelled ? '部分图片已完成' : '高清处理完成';
+      beforeImage.src = fileUrl(state.results[0].input);
+      $('fileName').textContent = state.results[0].input.split(/[\\/]/).pop();
+      $('fileMeta').textContent = result.cancelled ? '部分图片已完成' : cleaning ? '表面清理完成' : '处理完成';
       $('openFolderButton').classList.remove('hidden');
     }
   } catch (error) {
@@ -181,17 +184,25 @@ canvas.addEventListener('pointerup', () => { startPoint = null; });
 canvas.addEventListener('pointercancel', () => { startPoint = null; });
 $('processMode').addEventListener('change', () => {
   const active = $('processMode').value === 'refine';
+  const cleaning = $('processMode').value === 'surface';
   if (active && state.files.length) beforeImage.src = fileUrl(state.files[0]);
   $('refineSettings').classList.toggle('hidden', !active);
   canvas.classList.toggle('hidden', !active);
   $('divider').classList.toggle('hidden', active);
   $('beforeLayer').style.right = active ? '0%' : '50%';
-  $('startButton').textContent = active ? '开始局部精修' : '开始高清放大';
+  $('startButton').textContent = active ? '开始局部精修' : cleaning ? '开始表面清理' : '开始高清放大';
   $('cancelButton').textContent = active ? '停止等待（后台任务可能继续）' : '取消任务';
   document.querySelectorAll('.settings fieldset').forEach(el => {
-    if (!el.contains($('processMode')) && el.id !== 'refineSettings') el.classList.toggle('hidden', active);
+    if (el.id === 'surfaceSettings') el.classList.toggle('hidden', !cleaning);
+    else if (!el.contains($('processMode')) && el.id !== 'refineSettings') el.classList.toggle('hidden', active || cleaning);
   });
   drawRegion();
+});
+afterImage.addEventListener('load', () => {
+  if (state.results.some(r => r.outputUrl === afterImage.src)) $('fileMeta').textContent = `已保存 · ${afterImage.naturalWidth} × ${afterImage.naturalHeight} px`;
+});
+afterImage.addEventListener('error', () => {
+  if (state.results.length) $('fileMeta').textContent = '预览加载失败；文件已保存，请打开导出文件夹查看';
 });
 $('reselectRegion').addEventListener('click', () => {
   if (!state.files.length) return;

@@ -13,6 +13,30 @@ let cancelled = false;
 let busy = false;
 let imageWorker = null;
 let refineController = null;
+ipcMain.handle('surface:start', async (_, payload) => {
+  if (busy) throw new Error('已有任务正在运行');
+  const files = (payload.files || []).filter(isSupportedImage);
+  if (!files.length || !payload.outputDirectory || !fs.existsSync(payload.outputDirectory)) throw new Error('请选择图片和导出文件夹');
+  busy = true; cancelled = false;
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'clearscale-surface-'));
+  const results = [];
+  try {
+    for (const input of files) {
+      if (cancelled) break;
+      mainWindow.webContents.send('upscale:progress', { percent: Math.round(results.length / files.length * 100), message: '保留亮度纹理，清理局部彩色杂点…' });
+      const pending = path.join(temp, 'surface.png');
+      const size = await processImage('surface', [input, pending, { strength: payload.strength }]);
+      if (cancelled) break;
+      const name = path.parse(input).name + '_surface';
+      let output = path.join(payload.outputDirectory, name + '.png');
+      for (let n = 1; fs.existsSync(output); n++) output = path.join(payload.outputDirectory, name + '_' + n + '.png');
+      fs.copyFileSync(pending, output, fs.constants.COPYFILE_EXCL);
+      results.push({ input, output, outputUrl: pathToFileURL(output).href, ...size });
+    }
+    mainWindow.webContents.send('upscale:progress', { percent: cancelled ? Math.round(results.length / files.length * 100) : 100, message: cancelled ? '已取消' : '表面清理完成，原尺寸 PNG 已保存' });
+    return { cancelled, results };
+  } finally { busy = false; fs.rmSync(temp, { recursive: true, force: true }); }
+});
 ipcMain.handle('refine:status', () => require('./refine').status());
 ipcMain.handle('refine:start', async (_, payload) => {
   if (busy) throw new Error('已有任务正在运行');

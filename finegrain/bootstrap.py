@@ -11,10 +11,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 REVISION = 'a632fb6b948fa6b1a55d816982655d6dc8ed995e'
 REFINERS = 'a5d3c2971b84f6faa4762b1cf5a07f4f812bb1f5'
-VERSION = 'launcher-0.1.0'
+VERSION = 'launcher-0.1.1-preview-fix'
 
 def patch_app(text):
     replacements = {
+        'from gradio_imageslider import ImageSlider': '# Use the built-in Gradio gallery for compatible result serialization.',
+        'output_slider = ImageSlider(': 'output_slider = gr.Gallery(columns=2, format="png",',
+        'label="Before / After",': 'label="Original / Enhanced (click to inspect)",',
+        'return gr.Warning(f"Error during processing: {str(e)}")': 'raise gr.Error(f"Processing failed: {str(e)}") from e',
+        'return gr.Warning("Please load an image first!")': 'raise gr.Error("Please load an image first!")',
         'loras_scale={"more_details": 0.5, "sdxl_render": 1.0}': 'loras_scale={"more_details": 0.0, "sdxl_render": 0.0}',
         'value=112,': 'value=64,',
         'value=144,': 'value=64,',
@@ -27,7 +32,7 @@ def patch_app(text):
         if old not in text:
             raise RuntimeError('Upstream changed; patch stopped: ' + old)
         text = text.replace(old, new)
-    return '# Modified by ClearScale: conservative defaults, regular run button, local-only browser launch.\n' + text
+    return '# Modified by ClearScale: conservative defaults, native result gallery, explicit processing errors, local-only browser launch.\n' + text
 
 def install(uv):
     runtime = ROOT / 'runtime'
