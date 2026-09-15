@@ -43,7 +43,11 @@
     <aside class="settings">
       <div class="settings-head"><h2>高清设置</h2><span class="status" id="engineStatus">检测引擎…</span></div>
       <fieldset><legend>处理模式</legend>
-        <select id="processMode"><option value="upscale">基础高清 · 自动降噪</option><option value="refine">局部材质精修 · 实验功能</option></select>
+        <select id="processMode"><option value="upscale">基础高清 · 自动降噪</option><option value="surface">表面清理 · 保留亮度纹理</option><option value="refine">局部材质精修 · 实验功能</option></select>
+      </fieldset>
+      <fieldset id="surfaceSettings" class="hidden"><legend>局部彩色杂点清理</legend>
+        <select id="surfaceStrength"><option value="0.2">轻度</option><option value="0.35" selected>标准</option><option value="0.6">较强</option></select>
+        <p class="hint">保持原尺寸，导出 PNG。不锐化、不重绘、不调整光影。只减轻小范围彩色杂点，不能消除塑胶感、已有白边或大面积色差。</p>
       </fieldset>
       <fieldset id="refineSettings" class="hidden"><legend>局部精修</legend>
         <p class="hint">先启动本机 ComfyUI（8188 端口）及 Ultimate SD Upscale 节点。此模式一次处理一张，导出 PNG。</p>
