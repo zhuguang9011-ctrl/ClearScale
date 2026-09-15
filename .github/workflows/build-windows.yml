@@ -27,11 +27,15 @@ jobs:
       - uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.1.0
+          tag_name: v1.2.0-beta.1
           target_commitish: ${{ github.sha }}
-          name: ClearScale v1.1.0
+          name: ClearScale v1.2.0-beta.1
+          prerelease: true
           body: |
-            新增自动降噪、局部色泽均匀优化，修正 2×/3× 分块错位。
+            新增局部材质精修实验功能：需自行安装本机 ComfyUI、Ultimate SD Upscale 和 SD1.5 模型。
+            支持框选产品、三种材质预设、低强度分块重绘；选区外不参与生成。
+            使用指南：https://github.com/zhuguang9011-ctrl/ClearScale/blob/main/REFINE_GUIDE.md
+            尚未完成真实 GPU 出图验证，不承诺消除塑胶感或严格保持选区内结构颜色。
             包含一键安装版（文件名带 Setup）和绿色免安装版。
           files: dist/*.exe
       - uses: softprops/action-gh-release@v2

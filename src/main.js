@@ -12,6 +12,26 @@ let runningProcess = null;
 let cancelled = false;
 let busy = false;
 let imageWorker = null;
+let refineController = null;
+ipcMain.handle('refine:status', () => require('./refine').status());
+ipcMain.handle('refine:start', async (_, payload) => {
+  if (busy) throw new Error('已有任务正在运行');
+  if (!isSupportedImage(payload.file) || !fs.existsSync(payload.file)) throw new Error('请选择有效图片');
+  if (!payload.outputDirectory || !fs.existsSync(payload.outputDirectory)) throw new Error('请选择导出文件夹');
+  busy = true;
+  refineController = new AbortController();
+  try {
+    const buffer = await require('./refine').refine(payload.file, payload.options, refineController.signal,
+      message => mainWindow.webContents.send('upscale:progress', { message, percent: null }));
+    refineController.signal.throwIfAborted();
+    const name = path.parse(payload.file).name + '_精修';
+    let output = path.join(payload.outputDirectory, name + '.png');
+    for (let n = 1; fs.existsSync(output); n++) output = path.join(payload.outputDirectory, name + '_' + n + '.png');
+    fs.writeFileSync(output, buffer, { flag: 'wx' });
+    mainWindow.webContents.send('upscale:progress', { message: '精修完成，请检查产品细节', percent: 100 });
+    return { results: [{ input: payload.file, output, outputUrl: pathToFileURL(output).href }] };
+  } finally { busy = false; refineController = null; }
+});
 function processImage(action, args) {
   return new Promise((resolve, reject) => {
     const worker = new Worker(path.join(__dirname, 'image-worker.js'), { workerData: { action, args } });
@@ -86,6 +106,7 @@ ipcMain.handle('engine:status', () => {
 
 ipcMain.handle('upscale:cancel', () => {
   cancelled = true;
+  refineController?.abort(new Error('已停止等待；ComfyUI 中的任务可能仍在运行'));
   if (runningProcess) runningProcess.kill();
   if (imageWorker) imageWorker.terminate();
   return true;

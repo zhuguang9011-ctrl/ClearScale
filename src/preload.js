@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('clearScale', {
+  refineStatus: () => ipcRenderer.invoke('refine:status'),
+  refine: payload => ipcRenderer.invoke('refine:start', payload),
   chooseImages: () => ipcRenderer.invoke('images:choose'),
   chooseFolder: () => ipcRenderer.invoke('folder:choose'),
   openFolder: folder => ipcRenderer.invoke('folder:open', folder),

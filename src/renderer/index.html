@@ -6,6 +6,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file: data: blob:; style-src 'self'; script-src 'self'">
   <title>ClearScale 清晰放大</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="refine.css">
 </head>
 <body>
   <header class="topbar">
@@ -29,6 +30,7 @@
           <button class="ghost" id="replaceButton">重新选择</button>
         </div>
         <div class="compare" id="compare">
+          <canvas id="regionCanvas" class="hidden"></canvas>
           <img id="afterImage" alt="高清处理后">
           <div class="before-layer" id="beforeLayer"><img id="beforeImage" alt="原图"></div>
           <div class="divider" id="divider"><span>↔</span></div>
@@ -40,6 +42,20 @@
 
     <aside class="settings">
       <div class="settings-head"><h2>高清设置</h2><span class="status" id="engineStatus">检测引擎…</span></div>
+      <fieldset><legend>处理模式</legend>
+        <select id="processMode"><option value="upscale">基础高清 · 自动降噪</option><option value="refine">局部材质精修 · 实验功能</option></select>
+      </fieldset>
+      <fieldset id="refineSettings" class="hidden"><legend>局部精修</legend>
+        <p class="hint">先启动本机 ComfyUI（8188 端口）及 Ultimate SD Upscale 节点。此模式一次处理一张，导出 PNG。</p>
+        <button id="connectRefine" class="ghost">检测精修引擎 / 刷新模型</button>
+        <p id="refineStatus" class="hint">尚未连接</p>
+        <label>SD1.5 模型<select id="checkpoint"></select></label>
+        <label>材质<select id="material"><option value="silk">丝绸 PLA · 保留柔和丝光</option><option value="black">黑色注塑 · 半哑光</option><option value="natural">通用产品 · 自然微纹理</option></select></label>
+        <label>重绘强度<select id="strength"><option value="0.15">0.15 · 轻度</option><option value="0.2" selected>0.20 · 标准</option><option value="0.25">0.25 · 较强</option></select></label>
+        <label>精修倍率<select id="refineScale"><option value="2">2×</option><option value="1">1×</option></select></label>
+        <p class="hint" id="regionHint">在左侧原图上拖动框选产品，避开文字。选区内可能改变细节与颜色，请检查结果。</p>
+        <button class="ghost" id="reselectRegion">重新框选原图</button>
+      </fieldset>
 
       <fieldset><legend>图片类型</legend>
         <label class="option active"><input type="radio" name="model" value="general" checked><span class="option-icon">▧</span><span><strong>照片 / 产品图</strong><small>保留真实纹理与边缘</small></span><i>✓</i></label>
