@@ -17,6 +17,11 @@ async function pickImages() {
 function fileUrl(filePath) { return `file:///${filePath.replaceAll('\\', '/').replace(/^\//, '').split('/').map((part, i) => i === 0 && /^[A-Za-z]:$/.test(part) ? part : encodeURIComponent(part)).join('/')}`; }
 function showSelection() {
   state.rect = null;
+  if ($('processMode').value === 'refine') {
+    $('regionCanvas').classList.remove('hidden');
+    $('beforeLayer').style.right = '0%';
+    $('divider').classList.add('hidden');
+  }
   emptyState.classList.add('hidden');
   preview.classList.remove('hidden');
   const first = state.files[0];
@@ -176,6 +181,7 @@ canvas.addEventListener('pointerup', () => { startPoint = null; });
 canvas.addEventListener('pointercancel', () => { startPoint = null; });
 $('processMode').addEventListener('change', () => {
   const active = $('processMode').value === 'refine';
+  if (active && state.files.length) beforeImage.src = fileUrl(state.files[0]);
   $('refineSettings').classList.toggle('hidden', !active);
   canvas.classList.toggle('hidden', !active);
   $('divider').classList.toggle('hidden', active);
