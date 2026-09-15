@@ -1,0 +1,56 @@
+name: Validate and package Finegrain launcher
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['finegrain/**', '.github/workflows/finegrain-launcher.yml']
+permissions:
+  contents: write
+concurrency:
+  group: finegrain-launcher
+  cancel-in-progress: true
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate PowerShell syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$pwd/finegrain/setup.ps1", [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count) { throw ($errors | Out-String) }
+      - name: Install actual Windows dependencies and construct UI without models
+        shell: powershell
+        run: ./finegrain/setup.ps1 -CheckOnly
+      - name: Package launcher only
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path finegrain/Start.cmd,finegrain/setup.ps1,finegrain/bootstrap.py,finegrain/smoke_test.py,finegrain/README.md -DestinationPath dist/Finegrain-Launcher-Windows.zip
+          $hash = (Get-FileHash dist/Finegrain-Launcher-Windows.zip -Algorithm SHA256).Hash
+          "$hash  Finegrain-Launcher-Windows.zip" | Set-Content dist/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Finegrain-Launcher-Windows
+          path: dist/*
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: finegrain-launcher-v0.1.0
+          target_commitish: ${{ github.sha }}
+          name: Finegrain Windows launcher v0.1.0 (experimental)
+          prerelease: true
+          body: |
+            解压 Finegrain-Launcher-Windows.zip，双击 Start.cmd。
+            不需要 ComfyUI 或 Pinokio；首次自动下载独立 Python 环境、依赖和模型。建议预留 20GB。
+            Windows CI 验证依赖安装和界面构造；未完成真实 GPU 出图验证。
+            本包不是 Finegrain 官方发布，仅为其固定版本提供启动脚本。
+            说明：https://github.com/zhuguang9011-ctrl/ClearScale/blob/main/finegrain/README.md
+          files: dist/*
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: Finegrain-setup-log
+          path: finegrain/setup.log
