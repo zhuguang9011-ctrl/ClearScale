@@ -28,14 +28,16 @@ jobs:
       - name: Verify source-preserving fusion
         shell: powershell
         run: |
-          ./seedvr2/runtime/uv.exe pip install --python ./seedvr2/runtime/venv/Scripts/python.exe numpy pillow
+          ./seedvr2/runtime/uv.exe pip install --python ./seedvr2/runtime/venv/Scripts/python.exe numpy pillow gradio==5.49.1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           ./seedvr2/runtime/venv/Scripts/python.exe ./seedvr2/test_fidelity_fusion.py
+          ./seedvr2/runtime/venv/Scripts/python.exe ./seedvr2/test_material_reference.py
+          ./seedvr2/runtime/venv/Scripts/python.exe ./seedvr2/app.py --check
       - name: Package test launcher
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          Compress-Archive -Path seedvr2/Start.cmd,seedvr2/setup.ps1,seedvr2/bootstrap.py,seedvr2/run_seedvr2.py,seedvr2/fidelity_fusion.py,seedvr2/smoke_test.py,seedvr2/README.md,finegrain/verify_result.py -DestinationPath dist/ClearScale-SeedVR2-Test-Windows.zip
+          Compress-Archive -Path seedvr2/Start.cmd,seedvr2/QuickStart.cmd,seedvr2/setup.ps1,seedvr2/bootstrap.py,seedvr2/run_seedvr2.py,seedvr2/fidelity_fusion.py,seedvr2/material_reference.py,seedvr2/app.py,seedvr2/smoke_test.py,seedvr2/README.md,finegrain/verify_result.py -DestinationPath dist/ClearScale-SeedVR2-Test-Windows.zip
           $hash = (Get-FileHash dist/ClearScale-SeedVR2-Test-Windows.zip -Algorithm SHA256).Hash
           "$hash  ClearScale-SeedVR2-Test-Windows.zip" | Set-Content dist/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4

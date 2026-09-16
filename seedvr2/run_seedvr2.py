@@ -22,6 +22,7 @@ def main():
     parser.add_argument("--scale", type=float, choices=(1.5, 2.0), default=2.0)
     parser.add_argument("--raw-output-only", action="store_true")
     parser.add_argument("--save-raw", action="store_true")
+    parser.add_argument("--no-explorer", action="store_true")
     args = parser.parse_args()
     if not 0.0 <= args.fusion_amount <= 0.5:
         parser.error("--fusion-amount must be between 0 and 0.5")
@@ -91,7 +92,7 @@ def main():
         verifier = ROOT / "verify_result.py"
         if verifier.exists():
             subprocess.run([sys.executable, str(verifier), str(source), str(output)], check=False)
-        if sys.platform == "win32":
+        if sys.platform == "win32" and not args.no_explorer:
             subprocess.run(["explorer.exe", f'/select,"{output}"'], check=False)
     finally:
         shutil.rmtree(job, ignore_errors=True)

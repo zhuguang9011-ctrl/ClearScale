@@ -1,4 +1,4 @@
-param([switch]$CheckOnly)
+param([switch]$CheckOnly, [switch]$Quick)
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -38,6 +38,12 @@ try {
   if (!$CheckOnly) {
     & $python -c "import torch; assert torch.cuda.is_available(), 'CUDA GPU unavailable'; print('GPU:',torch.cuda.get_device_name(0)); print('VRAM GB:',round(torch.cuda.get_device_properties(0).total_memory/1073741824,2)); x=torch.ones((64,64),device='cuda'); assert (x@x)[0,0].item()==64"
     if ($LASTEXITCODE -ne 0) { throw 'GPU check failed before model inference' }
+    if (!$Quick) {
+      Write-Host 'Opening ClearScale Material Studio in your browser.'
+      & $python app.py
+      if ($LASTEXITCODE -ne 0) { throw 'ClearScale Material Studio exited with an error' }
+      return
+    }
     Add-Type -AssemblyName System.Windows.Forms
     $dialog = New-Object System.Windows.Forms.OpenFileDialog
     $dialog.Title = 'Select one product image or a representative crop'

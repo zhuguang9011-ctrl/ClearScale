@@ -7,7 +7,7 @@ import zipfile
 from pathlib import Path
 
 SOURCE_SHA = "4490bd1f482e026674543386bb2a4d176da245b9"
-VERSION = "seedvr2-test-0.1.0"
+VERSION = "seedvr2-studio-0.2.0"
 ROOT = Path(__file__).resolve().parent
 RUNTIME = ROOT / "runtime"
 SOURCE = RUNTIME / "source"
@@ -57,6 +57,7 @@ def main():
     run([args.uv, "pip", "install", "--python", sys.executable,
          "torch==2.9.1", "torchvision==0.24.1", "--index-url", "https://download.pytorch.org/whl/cu128"])
     run([args.uv, "pip", "install", "--python", sys.executable, "-r", SOURCE / "requirements.txt"])
+    run([args.uv, "pip", "install", "--python", sys.executable, "gradio==5.49.1"])
     MARKER.write_text(expected, encoding="utf-8")
 
 
