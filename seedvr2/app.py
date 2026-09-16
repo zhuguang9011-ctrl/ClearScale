@@ -48,7 +48,8 @@ def image_pixels(value):
     return pixels
 
 
-def process(editor, reference, mode, scale, save_raw, reference_strength, texture_size):
+def process(editor, reference, reference_feature, mode, scale, save_raw,
+            reference_strength, texture_size):
     background, mask = editor_parts(editor)
     if reference is not None and mask is None:
         raise gr.Error("Paint the target material area before applying a reference")
@@ -91,13 +92,24 @@ def process(editor, reference, mode, scale, save_raw, reference_strength, textur
     if raw:
         gallery.append((str(raw[-1]), "Raw SeedVR2"))
     if reference is not None and mode != "Raw SeedVR2":
-        referenced = job / f"source_ClearScale_Arrangement_{datetime.now():%Y%m%d_%H%M%S}.png"
+        feature_modes = {
+            "自动分析（建议）": "auto",
+            "排列 / 织法 / 线距": "arrangement",
+            "表面细纹 / 颗粒 / 纤维": "microtexture",
+            "光泽 / 哑光 / 柔和反射": "finish",
+            "综合材质（不含颜色）": "material",
+        }
+        feature_mode = feature_modes[reference_feature]
+        referenced = job / f"source_ClearScale_Reference_{feature_mode}_{datetime.now():%Y%m%d_%H%M%S}.png"
         try:
-            report = apply_reference(final, reference, mask, referenced, reference_strength, int(texture_size))
+            report = apply_reference(
+                final, reference, mask, referenced, reference_strength,
+                int(texture_size), feature_mode,
+            )
             final = referenced
-            gallery.append((str(final), "Fidelity + reference line arrangement (target colour kept)"))
+            gallery.append((str(final), f"Fidelity + {reference_feature} (target colour kept)"))
             lines.append(
-                f"REFERENCE APPLIED: {report['masked_fraction'] * 100:.1f}% area, "
+                f"REFERENCE APPLIED [{feature_mode}]: {report['masked_fraction'] * 100:.1f}% area, "
                 f"mean luma change {report['mean_absolute_luminance_change_0_255']:.2f}/255"
             )
         except Exception as exc:
@@ -114,26 +126,32 @@ def build_ui():
     .panel {border:1px solid #343841 !important; border-radius:12px !important; background:#1d2026 !important}
     """
     with gr.Blocks(title="ClearScale Material Studio", css=css, theme=gr.themes.Base()) as demo:
-        gr.Markdown("# ClearScale Material Studio\n保留结构的高清放大；参考图只提供线距、排列和表面起伏，不转移颜色。请在原图上涂满目标线材表面（至少 1%）。")
+        gr.Markdown("# ClearScale Material Studio\n保留结构的高清放大；参考特征可细分为排列、表面细纹、光泽或综合材质。参考颜色默认不转移。")
         with gr.Row():
             with gr.Column(scale=5, elem_classes="panel"):
                 editor = gr.ImageEditor(label="1. 原图 — 使用参考材质时，涂满目标产品表面", type="numpy")
                 reference = gr.ImageEditor(
-                    label="2. 可选：线材排列参考图 — 裁剪到纯线材，排除文字、包装和背景",
+                    label="2. 可选：参考图 — 裁剪到纯材质，排除文字、包装和背景",
                     type="numpy",
                 )
             with gr.Column(scale=3, elem_classes="panel"):
                 mode = gr.Dropdown(["Fidelity 15%", "Balanced 28%", "Detail 40%", "Raw SeedVR2"], value="Balanced 28%", label="Detail mode")
                 scale = gr.Radio([1.5, 2.0], value=2.0, label="Output scale")
                 save_raw = gr.Checkbox(False, label="Also save raw SeedVR2 result")
-                reference_strength = gr.Slider(0.0, 12.0, value=4.0, step=0.5, label="线材排列参考强度（不转移颜色，建议 4）")
-                texture_size = gr.Slider(128, 640, value=320, step=32, label="排列尺度 / 线距")
+                reference_feature = gr.Dropdown(
+                    ["自动分析（建议）", "排列 / 织法 / 线距", "表面细纹 / 颗粒 / 纤维",
+                     "光泽 / 哑光 / 柔和反射", "综合材质（不含颜色）"],
+                    value="自动分析（建议）", label="参考图要提供什么",
+                )
+                reference_strength = gr.Slider(0.0, 12.0, value=4.0, step=0.5, label="参考特征强度（颜色保持原图，建议 4）")
+                texture_size = gr.Slider(128, 640, value=320, step=32, label="参考特征尺度")
                 run = gr.Button("Enhance", variant="primary")
                 status = gr.Textbox(label="Console", lines=18)
             with gr.Column(scale=5, elem_classes="panel"):
                 gallery = gr.Gallery(label="3. 最终结果", columns=1, height=720, object_fit="contain")
-                download = gr.File(label="下载最终 PNG（排列参考成功时文件名含 Arrangement）")
-        run.click(process, [editor, reference, mode, scale, save_raw, reference_strength, texture_size], [gallery, status, download])
+                download = gr.File(label="下载最终 PNG（参考成功时文件名含 Reference 和特征类型）")
+        run.click(process, [editor, reference, reference_feature, mode, scale, save_raw,
+                            reference_strength, texture_size], [gallery, status, download])
     return demo.queue(default_concurrency_limit=1)
 
 

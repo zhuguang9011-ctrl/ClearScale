@@ -20,14 +20,15 @@ with tempfile.TemporaryDirectory() as temporary:
     reference = np.stack([110 + ((x + y) % 5) * 5] * 3, axis=2).astype(np.uint8)
     mask = np.zeros((96, 96), dtype=np.uint8)
     mask[8:88, 8:88] = 255
-    report = apply_reference(source, reference, mask, output, strength=4.0, texture_size=48)
+    report = apply_reference(source, reference, mask, output, strength=4.0,
+                             texture_size=48, feature_mode="auto")
     result = np.asarray(Image.open(output).convert("RGBA"))
     assert np.array_equal(result[..., 3], base[..., 3])
     assert np.array_equal(result[:3, :3, :3], base[:3, :3, :3])
     assert np.mean(np.abs(result[15:35, 15:35, :3].astype(float) - base[15:35, 15:35, :3])) > 0.05
     assert report["masked_fraction"] > 0.5
     assert 0.05 < report["mean_absolute_luminance_change_0_255"] < 5.0
-    assert report["reference_detail_bands"] == "micro 65% + meso 35%"
+    assert report["reference_detail_bands"] == "micro + meso + finish"
     assert report["reference_color_transferred"] is False
     # An equal luminance delta is applied to R/G/B, so target channel spacing
     # (and therefore target chroma) must remain intact away from clipping.
@@ -37,5 +38,15 @@ with tempfile.TemporaryDirectory() as temporary:
                          (original[..., 1] - original[..., 0]))) <= 1
     assert np.max(np.abs((target[..., 2] - target[..., 1]) -
                          (original[..., 2] - original[..., 1]))) <= 1
+
+    for feature_mode in ("arrangement", "microtexture", "finish", "material"):
+        mode_output = root / f"{feature_mode}.png"
+        mode_report = apply_reference(
+            source, reference, mask, mode_output, strength=4.0,
+            texture_size=48, feature_mode=feature_mode,
+        )
+        assert mode_output.exists()
+        assert mode_report["reference_feature_mode"] == feature_mode
+        assert mode_report["reference_color_transferred"] is False
 
 print("material reference test passed")

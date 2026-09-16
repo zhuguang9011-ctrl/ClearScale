@@ -1,4 +1,4 @@
-"""Masked line-arrangement transfer that preserves the target image's colour."""
+"""Masked, decomposed reference transfer that preserves the target image's colour."""
 import json
 from pathlib import Path
 
@@ -6,7 +6,16 @@ import numpy as np
 from PIL import Image, ImageFilter
 
 
-def apply_reference(image_path, reference, mask, output_path, strength=1.2, texture_size=320):
+FEATURE_WEIGHTS = {
+    "arrangement": (0.20, 0.70, 0.10),
+    "microtexture": (0.80, 0.15, 0.05),
+    "finish": (0.05, 0.25, 0.70),
+    "material": (0.45, 0.35, 0.20),
+}
+
+
+def apply_reference(image_path, reference, mask, output_path, strength=1.2,
+                    texture_size=320, feature_mode="auto"):
     image_path, output_path = Path(image_path), Path(output_path)
     with Image.open(image_path) as image:
         base_image = image.convert("RGBA")
@@ -18,16 +27,29 @@ def apply_reference(image_path, reference, mask, output_path, strength=1.2, text
     tile_luma = tile.convert("L")
     tile_y = np.asarray(tile_luma, dtype=np.float32)
     tile_fine = np.asarray(tile_luma.filter(ImageFilter.GaussianBlur(1.2)), dtype=np.float32)
-    tile_coarse = np.asarray(tile_luma.filter(ImageFilter.GaussianBlur(5.0)), dtype=np.float32)
+    tile_medium = np.asarray(tile_luma.filter(ImageFilter.GaussianBlur(5.0)), dtype=np.float32)
+    tile_coarse = np.asarray(tile_luma.filter(ImageFilter.GaussianBlur(14.0)), dtype=np.float32)
     micro = tile_y - tile_fine
-    meso = tile_fine - tile_coarse
-    micro_scale = float(np.percentile(np.abs(micro), 95))
-    meso_scale = float(np.percentile(np.abs(meso), 95))
-    if max(micro_scale, meso_scale) < 0.25:
+    meso = tile_fine - tile_medium
+    finish = tile_medium - tile_coarse
+    scales = np.array([
+        float(np.percentile(np.abs(micro), 95)),
+        float(np.percentile(np.abs(meso), 95)),
+        float(np.percentile(np.abs(finish), 95)),
+    ], dtype=np.float32)
+    if float(scales.max()) < 0.25:
         raise ValueError("Reference image has too little visible surface texture")
-    micro /= max(micro_scale, 0.25)
-    meso /= max(meso_scale, 0.25)
-    texture = np.clip(micro * 0.65 + meso * 0.35, -1.5, 1.5)
+    bands = [micro / max(float(scales[0]), 0.25),
+             meso / max(float(scales[1]), 0.25),
+             finish / max(float(scales[2]), 0.25)]
+    if feature_mode == "auto":
+        weights = np.sqrt(np.maximum(scales, 0.01))
+        weights /= weights.sum()
+    else:
+        if feature_mode not in FEATURE_WEIGHTS:
+            raise ValueError(f"Unknown reference feature mode: {feature_mode}")
+        weights = np.asarray(FEATURE_WEIGHTS[feature_mode], dtype=np.float32)
+    texture = np.clip(sum(weight * band for weight, band in zip(weights, bands)), -1.5, 1.5)
     mirrored = np.block([[texture, texture[:, ::-1]],
                          [texture[::-1, :], texture[::-1, ::-1]]])
     pattern_size = texture_size * 2
@@ -54,13 +76,14 @@ def apply_reference(image_path, reference, mask, output_path, strength=1.2, text
     result = np.concatenate([np.clip(rgb + delta[..., None], 0, 255), base[..., 3:4]], axis=2).astype(np.uint8)
     Image.fromarray(result, mode="RGBA").save(output_path, format="PNG")
     report = {
-        "mode": "masked grayscale line-arrangement transfer",
+        "mode": "masked decomposed grayscale reference transfer",
+        "reference_feature_mode": feature_mode,
+        "reference_feature_weights_micro_meso_finish": [float(value) for value in weights],
         "strength_luma": float(strength),
         "texture_size": int(texture_size),
         "masked_fraction": masked_fraction,
         "mean_absolute_luminance_change_0_255": float(np.mean(np.abs(delta))),
-        "reference_detail_bands": "micro 65% + meso 35%",
-        "reference_role": "line spacing, parallel arrangement and surface relief only",
+        "reference_detail_bands": "micro + meso + finish",
         "reference_color_transferred": False,
         "structure_and_color_source": "ClearScale fidelity output",
     }
