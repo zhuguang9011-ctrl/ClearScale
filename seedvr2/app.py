@@ -94,16 +94,20 @@ def process(editor, color_reference, material_reference, arrangement_reference,
         ]
         lines.append("POSE STAGE: optional models install/download only on first use")
         yield [], "\n".join(lines), None
+        pose_log = ROOT / "pose_reference.log"
         pose_process = subprocess.Popen(
             pose_command, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace",
         )
         assert pose_process.stdout is not None
-        for line in pose_process.stdout:
-            lines.append(line.rstrip())
-            yield [], "\n".join(lines[-18:]), None
+        with pose_log.open("w", encoding="utf-8") as log:
+            for line in pose_process.stdout:
+                log.write(line)
+                log.flush()
+                lines.append(line.rstrip())
+                yield [], "\n".join(lines[-18:]), None
         if pose_process.wait():
-            raise gr.Error("Pose reconstruction failed. The three deterministic reference channels were not run.")
+            raise gr.Error(f"Pose reconstruction failed. Read {pose_log}")
         source_for_seed = pose_output
     amounts = {"Fidelity 15%": 0.15, "Balanced 28%": 0.28, "Detail 40%": 0.40}
     command = [sys.executable, str(ROOT / "run_seedvr2.py"), str(source_for_seed), "--scale", str(scale), "--no-explorer"]
