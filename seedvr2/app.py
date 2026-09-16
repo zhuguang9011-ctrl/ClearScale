@@ -2,6 +2,7 @@ import argparse
 import shutil
 import subprocess
 import sys
+from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 
@@ -16,10 +17,31 @@ ROOT = Path(__file__).resolve().parent
 OUTPUTS = ROOT / "outputs"
 
 
+def editor_mapping(value):
+    """Normalize ImageEditor payloads across Gradio/browser variants."""
+    if isinstance(value, Mapping):
+        return value
+    for method_name in ("model_dump", "dict"):
+        method = getattr(value, method_name, None)
+        if callable(method):
+            converted = method()
+            if isinstance(converted, Mapping):
+                return converted
+    return None
+
+
 def editor_parts(value):
-    if not isinstance(value, dict) or value.get("background") is None:
+    value = editor_mapping(value)
+    if value is None:
         raise gr.Error("Upload a source image first")
-    background = np.asarray(value["background"])
+    background_value = value.get("background")
+    if background_value is None:
+        # Some Chromium/Gradio combinations submit an uploaded image only as
+        # the rendered composite even though it is visible in the editor.
+        background_value = value.get("composite")
+    if background_value is None:
+        raise gr.Error("Upload a source image first")
+    background = np.asarray(background_value)
     if np.issubdtype(background.dtype, np.floating) and float(background.max()) <= 1.0:
         background = background * 255.0
     layers = value.get("layers") or []
@@ -35,7 +57,9 @@ def editor_parts(value):
 
 def image_pixels(value):
     """Accept gr.Image or gr.ImageEditor values and return the visible pixels."""
-    if isinstance(value, dict):
+    editor_value = editor_mapping(value)
+    if editor_value is not None:
+        value = editor_value
         pixels = value.get("composite")
         if pixels is None:
             pixels = value.get("background")

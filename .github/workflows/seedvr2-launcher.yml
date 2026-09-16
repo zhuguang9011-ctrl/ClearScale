@@ -33,6 +33,7 @@ jobs:
           ./seedvr2/runtime/venv/Scripts/python.exe ./seedvr2/test_fidelity_fusion.py
           ./seedvr2/runtime/venv/Scripts/python.exe ./seedvr2/test_material_reference.py
           ./seedvr2/runtime/venv/Scripts/python.exe ./seedvr2/test_pose_reference.py
+          ./seedvr2/runtime/venv/Scripts/python.exe ./seedvr2/test_editor_inputs.py
           ./seedvr2/runtime/venv/Scripts/python.exe ./seedvr2/app.py --check
       - name: Package test launcher
         shell: pwsh
