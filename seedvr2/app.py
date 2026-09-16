@@ -30,20 +30,10 @@ def editor_mapping(value):
     return None
 
 
-def editor_parts(value):
+def editor_mask(value):
     value = editor_mapping(value)
     if value is None:
-        raise gr.Error("Upload a source image first")
-    background_value = value.get("background")
-    if background_value is None:
-        # Some Chromium/Gradio combinations submit an uploaded image only as
-        # the rendered composite even though it is visible in the editor.
-        background_value = value.get("composite")
-    if background_value is None:
-        raise gr.Error("Upload a source image first")
-    background = np.asarray(background_value)
-    if np.issubdtype(background.dtype, np.floating) and float(background.max()) <= 1.0:
-        background = background * 255.0
+        return None
     layers = value.get("layers") or []
     mask = None
     for layer in layers:
@@ -52,10 +42,33 @@ def editor_parts(value):
             array = array * 255.0
         alpha = array[..., 3] if array.ndim == 3 and array.shape[2] >= 4 else np.max(array[..., :3], axis=2)
         mask = alpha if mask is None else np.maximum(mask, alpha)
-    return background, mask
+    return mask
 
 
-def image_pixels(value):
+def reference_present(value):
+    payload = editor_mapping(value)
+    if payload is not None:
+        return any(payload.get(key) is not None for key in ("background", "composite"))
+    return value is not None
+
+
+def editor_parts(value, error_message="请在原图框上传原图"):
+    value = editor_mapping(value)
+    if value is None:
+        raise gr.Error(error_message)
+    background_value = value.get("background")
+    if background_value is None:
+        # Compatibility fallback; do not infer the browser payload from a screenshot.
+        background_value = value.get("composite")
+    if background_value is None:
+        raise gr.Error(error_message)
+    background = np.asarray(background_value)
+    if np.issubdtype(background.dtype, np.floating) and float(background.max()) <= 1.0:
+        background = background * 255.0
+    return background, editor_mask(value)
+
+
+def image_pixels(value, error_message="Upload and crop a material reference first"):
     """Accept gr.Image or gr.ImageEditor values and return the visible pixels."""
     editor_value = editor_mapping(value)
     if editor_value is not None:
@@ -66,18 +79,36 @@ def image_pixels(value):
     else:
         pixels = value
     if pixels is None:
-        raise gr.Error("Upload and crop a material reference first")
+        raise gr.Error(error_message)
     pixels = np.asarray(pixels)
     if np.issubdtype(pixels.dtype, np.floating) and float(pixels.max()) <= 1.0:
         pixels = pixels * 255.0
     return pixels
 
 
-def process(editor, color_reference, material_reference, arrangement_reference,
+def populate_mask_editor(source):
+    if source is None:
+        return None
+    pixels = np.asarray(source)
+    return {"background": pixels, "layers": [], "composite": pixels}
+
+
+def process(source_upload, editor, color_reference, material_reference, arrangement_reference,
             pose_reference, material_feature, mode, scale, save_raw, color_strength,
             material_strength, arrangement_strength, texture_size,
             pose_identity_strength, pose_structure_strength):
-    background, source_mask = editor_parts(editor)
+    # The dedicated upload is the authoritative source. Editor payloads
+    # are used only for the painted mask when a dedicated upload is provided.
+    if source_upload is not None:
+        background = image_pixels(source_upload, "Upload a source image first")
+        source_mask = editor_mask(editor)
+    else:
+        # Backward-compatible fallback for a source placed directly in the editor.
+        background, source_mask = editor_parts(editor)
+    color_reference, material_reference, arrangement_reference, pose_reference = [
+        value if reference_present(value) else None
+        for value in (color_reference, material_reference, arrangement_reference, pose_reference)
+    ]
     references = [color_reference, material_reference, arrangement_reference]
     has_reference = any(value is not None for value in references)
     has_pose = pose_reference is not None
@@ -88,7 +119,7 @@ def process(editor, color_reference, material_reference, arrangement_reference,
         raise gr.Error("Paint a larger material surface. The current painted area is less than 1% of the image.")
     pose_background = pose_mask = None
     if has_pose:
-        pose_background, pose_mask = editor_parts(pose_reference)
+        pose_background, pose_mask = editor_parts(pose_reference, "姿态参考缺少图片，请重新上传或清空该通道")
         if pose_mask is None or float(np.mean(pose_mask > 25)) < 0.01:
             raise gr.Error("Paint the desired product area on the pose/layout reference (at least 1%).")
     mask = pose_mask if has_pose else source_mask
@@ -211,10 +242,12 @@ def build_ui():
     .panel {border:1px solid #343841 !important; border-radius:12px !important; background:#1d2026 !important}
     """
     with gr.Blocks(title="ClearScale Material Studio", css=css, theme=gr.themes.Base()) as demo:
-        gr.Markdown("# ClearScale Material Studio\n四个参考通道均可留空。姿态/摆放属于实验性生成阶段，首次使用会额外安装并下载模型；其他三个通道保持确定性处理。")
+        gr.Markdown("# ClearScale Material Studio · 空参考修复版\n四个参考通道均可留空。姿态/摆放属于实验性生成阶段，首次使用会额外安装并下载模型；其他三个通道保持确定性处理。")
         with gr.Row():
             with gr.Column(scale=5, elem_classes="panel"):
-                editor = gr.ImageEditor(label="1. 原图 — 使用参考材质时，涂满目标产品表面", type="numpy")
+                source_upload = gr.Image(label="1. 原图文件（必填）", type="numpy")
+                editor = gr.ImageEditor(label="2. 目标区域 — 使用任何参考图时，在这里涂满要处理的产品表面", type="numpy")
+                source_upload.change(populate_mask_editor, source_upload, editor)
                 with gr.Tabs():
                     with gr.Tab("颜色参考（可空）"):
                         color_reference = gr.ImageEditor(label="只参考颜色；目标明暗和细节保留", type="numpy")
@@ -249,7 +282,7 @@ def build_ui():
             with gr.Column(scale=5, elem_classes="panel"):
                 gallery = gr.Gallery(label="3. 最终结果", columns=1, height=720, object_fit="contain")
                 download = gr.File(label="下载最终 PNG（文件名会列出实际使用的参考通道）")
-        run.click(process, [editor, color_reference, material_reference, arrangement_reference,
+        run.click(process, [source_upload, editor, color_reference, material_reference, arrangement_reference,
                             pose_reference, material_feature, mode, scale, save_raw, color_strength,
                             material_strength, arrangement_strength, texture_size,
                             pose_identity_strength, pose_structure_strength],
