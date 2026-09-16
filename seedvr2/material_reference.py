@@ -1,4 +1,4 @@
-"""Masked, structure-safe microtexture transfer from a material reference image."""
+"""Masked line-arrangement transfer that preserves the target image's colour."""
 import json
 from pathlib import Path
 
@@ -54,12 +54,14 @@ def apply_reference(image_path, reference, mask, output_path, strength=1.2, text
     result = np.concatenate([np.clip(rgb + delta[..., None], 0, 255), base[..., 3:4]], axis=2).astype(np.uint8)
     Image.fromarray(result, mode="RGBA").save(output_path, format="PNG")
     report = {
-        "mode": "masked reference microtexture",
+        "mode": "masked grayscale line-arrangement transfer",
         "strength_luma": float(strength),
         "texture_size": int(texture_size),
         "masked_fraction": masked_fraction,
         "mean_absolute_luminance_change_0_255": float(np.mean(np.abs(delta))),
         "reference_detail_bands": "micro 65% + meso 35%",
+        "reference_role": "line spacing, parallel arrangement and surface relief only",
+        "reference_color_transferred": False,
         "structure_and_color_source": "ClearScale fidelity output",
     }
     output_path.with_suffix(".reference.json").write_text(

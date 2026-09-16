@@ -28,5 +28,14 @@ with tempfile.TemporaryDirectory() as temporary:
     assert report["masked_fraction"] > 0.5
     assert 0.05 < report["mean_absolute_luminance_change_0_255"] < 5.0
     assert report["reference_detail_bands"] == "micro 65% + meso 35%"
+    assert report["reference_color_transferred"] is False
+    # An equal luminance delta is applied to R/G/B, so target channel spacing
+    # (and therefore target chroma) must remain intact away from clipping.
+    target = result[15:35, 15:35, :3].astype(np.int16)
+    original = base[15:35, 15:35, :3].astype(np.int16)
+    assert np.max(np.abs((target[..., 1] - target[..., 0]) -
+                         (original[..., 1] - original[..., 0]))) <= 1
+    assert np.max(np.abs((target[..., 2] - target[..., 1]) -
+                         (original[..., 2] - original[..., 1]))) <= 1
 
 print("material reference test passed")
