@@ -40,6 +40,21 @@ with tempfile.TemporaryDirectory() as temporary:
     assert np.array_equal(np.asarray(output)[..., 3], np.asarray(base)[..., 3])
     assert detail_energy(output) >= detail_energy(base) * 0.99
     assert report["source_color_and_alpha_preserved"] is True
+    assert report["processing"] == "512px low-memory tiles with overlap"
     assert report["seed_contribution_mean"] < 0.01
+
+    # Exercise more than one tile in both directions. This catches regressions
+    # in the low-memory path used by multi-megapixel Windows jobs.
+    large_source_path = root / "large_source.png"
+    large_seed_path = root / "large_seed.png"
+    large_output_path = root / "large_output.png"
+    large = source.resize((520, 516), Image.Resampling.BICUBIC)
+    large.save(large_source_path)
+    large_seed = large.resize((1040, 1032), Image.Resampling.LANCZOS)
+    large_seed.save(large_seed_path)
+    large_report = fuse(large_source_path, large_seed_path, large_output_path, amount=0.28)
+    with Image.open(large_output_path) as large_output:
+        assert large_output.size == (1040, 1032)
+    assert large_report["processing"] == "512px low-memory tiles with overlap"
 
 print("fidelity fusion test passed")

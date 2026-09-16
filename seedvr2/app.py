@@ -70,9 +70,13 @@ def process(editor, reference, mode, scale, save_raw, reference_strength, textur
         gallery.append((str(raw[-1]), "Raw SeedVR2"))
     if reference is not None and mode != "Raw SeedVR2":
         referenced = job / "ClearScale_reference_result.png"
-        apply_reference(final, reference, mask, referenced, reference_strength, int(texture_size))
-        final = referenced
-        gallery.append((str(final), "Fidelity + reference microtexture"))
+        try:
+            apply_reference(final, reference, mask, referenced, reference_strength, int(texture_size))
+            final = referenced
+            gallery.append((str(final), "Fidelity + reference microtexture"))
+        except Exception as exc:
+            lines.append(f"REFERENCE WARNING: {exc}; fidelity result preserved")
+            gallery.append((str(final), "Fidelity result (reference skipped)"))
     else:
         gallery.append((str(final), "Final"))
     yield gallery, "\n".join(lines[-18:]) + f"\nREADY: {final}", str(final)

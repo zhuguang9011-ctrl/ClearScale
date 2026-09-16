@@ -3,6 +3,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -82,7 +83,15 @@ def main():
             shutil.copy2(staged_output, output)
             fusion_report = {"mode": "raw SeedVR2 output"}
         else:
-            fusion_report = fuse(source, staged_output, output, args.fusion_amount)
+            try:
+                fusion_report = fuse(source, staged_output, output, args.fusion_amount)
+            except Exception as exc:
+                with inference_log.open("a", encoding="utf-8") as log:
+                    log.write("\nPOST-PROCESSING ERROR — raw output preserved\n")
+                    log.write(traceback.format_exc())
+                shutil.copy2(staged_output, output)
+                fusion_report = {"mode": "raw fallback", "postprocess_error": str(exc)}
+                print(f"WARNING: fidelity fusion failed; raw result preserved as {output}", flush=True)
             if args.save_raw:
                 raw_output = source.with_name(f"{source.stem}_SeedVR2_raw_{stamp}.png")
                 shutil.copy2(staged_output, raw_output)
