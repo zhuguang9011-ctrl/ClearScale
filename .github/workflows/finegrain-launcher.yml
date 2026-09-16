@@ -29,12 +29,15 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          Compress-Archive -Path finegrain/Start.cmd,finegrain/setup.ps1,finegrain/bootstrap.py,finegrain/smoke_test.py,finegrain/README.md -DestinationPath dist/Finegrain-Launcher-Windows.zip
+          Compress-Archive -Path finegrain/Start.cmd,finegrain/Verify.cmd,finegrain/Verify.ps1,finegrain/verify_result.py,finegrain/setup.ps1,finegrain/bootstrap.py,finegrain/smoke_test.py,finegrain/README.md -DestinationPath dist/Finegrain-Launcher-Windows.zip
           $hash = (Get-FileHash dist/Finegrain-Launcher-Windows.zip -Algorithm SHA256).Hash
           "$hash  Finegrain-Launcher-Windows.zip" | Set-Content dist/SHA256SUMS.txt
       - name: Verify result serialization with actual Gradio API
         shell: powershell
         run: ./finegrain/runtime/venv/Scripts/python.exe ./finegrain/test_preview.py
+      - name: Verify local evidence report
+        shell: powershell
+        run: ./finegrain/runtime/venv/Scripts/python.exe ./finegrain/test_verify_result.py
       - name: Verify actual preview loading in Edge
         shell: powershell
         env:
