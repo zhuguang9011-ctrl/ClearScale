@@ -236,13 +236,31 @@ def process(source_upload, editor, color_reference, material_reference, arrangem
     yield gallery, "\n".join(lines[-18:]) + f"\nREADY: {final}", str(final)
 
 
+def preview_filaments(source, editor, spacing, angle, curvature, contrast):
+    from filament_rebuild import rebuild
+    import json
+    if source is None:
+        raise gr.Error("请先上传原图文件")
+    try:
+        result, report = rebuild(Image.fromarray(np.uint8(source)), editor_mask(editor),
+                                 spacing, angle, curvature, contrast)
+    except ValueError as exc:
+        raise gr.Error(str(exc))
+    job = OUTPUTS / datetime.now().strftime("filaments_%Y%m%d_%H%M%S_%f")
+    job.mkdir(parents=True, exist_ok=True)
+    output = job / "filament_rebuilt.png"
+    result.save(output)
+    output.with_suffix('.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
+    return [(source, "原图"), (str(output), "手动线材重建 · 原图尺寸")], str(output)
+
+
 def build_ui():
     css = """
     .gradio-container {max-width: 1600px !important; background:#15171b}
     .panel {border:1px solid #343841 !important; border-radius:12px !important; background:#1d2026 !important}
     """
     with gr.Blocks(title="ClearScale Material Studio", css=css, theme=gr.themes.Base()) as demo:
-        gr.Markdown("# ClearScale Material Studio · 空参考修复版\n四个参考通道均可留空。姿态/摆放属于实验性生成阶段，首次使用会额外安装并下载模型；其他三个通道保持确定性处理。")
+        gr.Markdown("# ClearScale Material Studio · 线材重建试验版\n四个参考通道均可留空。姿态/摆放属于实验性生成阶段，首次使用会额外安装并下载模型；其他三个通道保持确定性处理。")
         with gr.Row():
             with gr.Column(scale=5, elem_classes="panel"):
                 source_upload = gr.Image(label="1. 原图文件（必填）", type="numpy")
@@ -254,7 +272,7 @@ def build_ui():
                     with gr.Tab("材质参考（可空）"):
                         material_reference = gr.ImageEditor(label="参考颗粒、纤维、光泽或哑光", type="numpy")
                     with gr.Tab("排列参考（可空）"):
-                        arrangement_reference = gr.ImageEditor(label="参考线距、织法和方向性排列", type="numpy")
+                        arrangement_reference = gr.ImageEditor(label="排列纹理叠加（不会整理旧线条；整理线条请用下方线材重建）", type="numpy")
                     with gr.Tab("姿态 / 摆放参考（实验，可空）"):
                         pose_reference = gr.ImageEditor(
                             label="参考整个产品的朝向、透视与构图；请涂满参考图中的目标产品区域",
@@ -277,11 +295,19 @@ def build_ui():
                     pose_identity_strength = gr.Slider(0.3, 1.0, value=0.75, step=0.05, label="产品身份保持强度")
                     pose_structure_strength = gr.Slider(0.3, 1.2, value=0.90, step=0.05, label="姿态结构强度")
                     gr.Markdown("姿态阶段会重建画面，不能保证文字或细小孔位完全一致；建议先用无文字的产品图测试。")
+                with gr.Accordion("线材重建（手动试验功能，先预览再放大）", open=True):
+                    gr.Markdown("只涂一个连续区域。此功能清除旧线纹并生成规则曲线，不读取参考图、不自动推断透视。不同开窗应分别处理。预览满意后可下载并作为新原图放大。")
+                    line_spacing = gr.Slider(3, 80, value=10, step=1, label="线距（原图像素）")
+                    line_angle = gr.Slider(-90, 90, value=0, step=1, label="方向（0 为竖线，90 为横线）")
+                    line_curve = gr.Slider(-2, 2, value=.35, step=.05, label="弯曲程度")
+                    line_contrast = gr.Slider(0, .4, value=.12, step=.01, label="线纹明暗强度")
+                    rebuild_button = gr.Button("预览并保存线材重建（无需 GPU）")
                 run = gr.Button("Enhance", variant="primary")
                 status = gr.Textbox(label="Console", lines=18)
             with gr.Column(scale=5, elem_classes="panel"):
                 gallery = gr.Gallery(label="3. 最终结果", columns=1, height=720, object_fit="contain")
                 download = gr.File(label="下载最终 PNG（文件名会列出实际使用的参考通道）")
+        rebuild_button.click(preview_filaments, [source_upload, editor, line_spacing, line_angle, line_curve, line_contrast], [gallery, download])
         run.click(process, [source_upload, editor, color_reference, material_reference, arrangement_reference,
                             pose_reference, material_feature, mode, scale, save_raw, color_strength,
                             material_strength, arrangement_strength, texture_size,
