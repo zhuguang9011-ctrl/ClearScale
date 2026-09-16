@@ -15,13 +15,19 @@ def apply_reference(image_path, reference, mask, output_path, strength=1.2, text
 
     reference_image = Image.fromarray(np.uint8(reference)).convert("RGB")
     tile = reference_image.resize((texture_size, texture_size), Image.Resampling.LANCZOS)
-    tile_y = np.asarray(tile.convert("L"), dtype=np.float32)
-    tile_low = np.asarray(tile.convert("L").filter(ImageFilter.GaussianBlur(2.0)), dtype=np.float32)
-    texture = tile_y - tile_low
-    scale = float(np.percentile(np.abs(texture), 95))
-    if scale < 0.25:
+    tile_luma = tile.convert("L")
+    tile_y = np.asarray(tile_luma, dtype=np.float32)
+    tile_fine = np.asarray(tile_luma.filter(ImageFilter.GaussianBlur(1.2)), dtype=np.float32)
+    tile_coarse = np.asarray(tile_luma.filter(ImageFilter.GaussianBlur(5.0)), dtype=np.float32)
+    micro = tile_y - tile_fine
+    meso = tile_fine - tile_coarse
+    micro_scale = float(np.percentile(np.abs(micro), 95))
+    meso_scale = float(np.percentile(np.abs(meso), 95))
+    if max(micro_scale, meso_scale) < 0.25:
         raise ValueError("Reference image has too little visible surface texture")
-    texture = np.clip(texture / scale, -1.5, 1.5)
+    micro /= max(micro_scale, 0.25)
+    meso /= max(meso_scale, 0.25)
+    texture = np.clip(micro * 0.65 + meso * 0.35, -1.5, 1.5)
     mirrored = np.block([[texture, texture[:, ::-1]],
                          [texture[::-1, :], texture[::-1, ::-1]]])
     pattern_size = texture_size * 2
@@ -31,8 +37,11 @@ def apply_reference(image_path, reference, mask, output_path, strength=1.2, text
     mask_image = Image.fromarray(np.uint8(mask)).convert("L").resize((width, height), Image.Resampling.BILINEAR)
     mask_image = mask_image.filter(ImageFilter.GaussianBlur(3.0))
     mask_values = np.asarray(mask_image, dtype=np.float32) / 255.0
+    masked_fraction = float(np.mean(mask_values > 0.1))
     if float(mask_values.max()) < 0.05:
         raise ValueError("Paint the target material area before using a reference image")
+    if masked_fraction < 0.01:
+        raise ValueError("Paint a larger target surface; the current mask covers less than 1% of the image")
 
     rgb = base[..., :3]
     luminance = rgb @ np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
@@ -48,8 +57,9 @@ def apply_reference(image_path, reference, mask, output_path, strength=1.2, text
         "mode": "masked reference microtexture",
         "strength_luma": float(strength),
         "texture_size": int(texture_size),
-        "masked_fraction": float(np.mean(mask_values > 0.1)),
+        "masked_fraction": masked_fraction,
         "mean_absolute_luminance_change_0_255": float(np.mean(np.abs(delta))),
+        "reference_detail_bands": "micro 65% + meso 35%",
         "structure_and_color_source": "ClearScale fidelity output",
     }
     output_path.with_suffix(".reference.json").write_text(
