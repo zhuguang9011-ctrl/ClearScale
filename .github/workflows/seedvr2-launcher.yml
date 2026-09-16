@@ -1,0 +1,47 @@
+name: Validate and package SeedVR2 test launcher
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, development/surface-cleanup]
+    paths: ['seedvr2/**', 'finegrain/verify_result.py', '.github/workflows/seedvr2-launcher.yml']
+permissions:
+  contents: write
+concurrency:
+  group: seedvr2-launcher-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate PowerShell syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$pwd/seedvr2/setup.ps1", [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count) { throw ($errors | Out-String) }
+      - name: Download and validate pinned source without models
+        shell: powershell
+        run: ./seedvr2/setup.ps1 -CheckOnly
+      - name: Package test launcher
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path seedvr2/Start.cmd,seedvr2/setup.ps1,seedvr2/bootstrap.py,seedvr2/run_seedvr2.py,seedvr2/smoke_test.py,seedvr2/README.md,finegrain/verify_result.py -DestinationPath dist/ClearScale-SeedVR2-Test-Windows.zip
+          $hash = (Get-FileHash dist/ClearScale-SeedVR2-Test-Windows.zip -Algorithm SHA256).Hash
+          "$hash  ClearScale-SeedVR2-Test-Windows.zip" | Set-Content dist/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClearScale-SeedVR2-Test-Windows
+          path: dist/*
+      - uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: seedvr2-test-v0.1.0
+          target_commitish: ${{ github.sha }}
+          name: ClearScale SeedVR2 standalone test v0.1.0
+          prerelease: true
+          body: Standalone 8GB VRAM evaluation package. No ComfyUI. This is a quality test, not a production release.
+          files: dist/*
