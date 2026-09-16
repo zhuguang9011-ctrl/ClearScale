@@ -43,7 +43,52 @@ try {
     $dialog.Title = 'Select one product image or a representative crop'
     $dialog.Filter = 'Image files|*.png;*.jpg;*.jpeg;*.webp;*.tif;*.tiff;*.bmp|All files|*.*'
     if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { exit 2 }
-    & $python run_seedvr2.py $dialog.FileName
+
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text = 'ClearScale processing options'
+    $form.Width = 520
+    $form.Height = 255
+    $form.StartPosition = 'CenterScreen'
+    $modeLabel = New-Object System.Windows.Forms.Label
+    $modeLabel.Text = 'Detail mode'
+    $modeLabel.Left = 24; $modeLabel.Top = 24; $modeLabel.Width = 120
+    $mode = New-Object System.Windows.Forms.ComboBox
+    $mode.Left = 150; $mode.Top = 20; $mode.Width = 320; $mode.DropDownStyle = 'DropDownList'
+    [void]$mode.Items.Add('Fidelity 15% - maximum preservation')
+    [void]$mode.Items.Add('Balanced 28% - recommended')
+    [void]$mode.Items.Add('Detail 40% - stronger enhancement')
+    [void]$mode.Items.Add('Raw SeedVR2 - comparison only')
+    $mode.SelectedIndex = 1
+    $scaleLabel = New-Object System.Windows.Forms.Label
+    $scaleLabel.Text = 'Output scale'
+    $scaleLabel.Left = 24; $scaleLabel.Top = 70; $scaleLabel.Width = 120
+    $scale = New-Object System.Windows.Forms.ComboBox
+    $scale.Left = 150; $scale.Top = 66; $scale.Width = 160; $scale.DropDownStyle = 'DropDownList'
+    [void]$scale.Items.Add('1.5x')
+    [void]$scale.Items.Add('2x')
+    $scale.SelectedIndex = 1
+    $saveRaw = New-Object System.Windows.Forms.CheckBox
+    $saveRaw.Text = 'Also save raw SeedVR2 result'
+    $saveRaw.Left = 150; $saveRaw.Top = 108; $saveRaw.Width = 260
+    $ok = New-Object System.Windows.Forms.Button
+    $ok.Text = 'Start'; $ok.Left = 270; $ok.Top = 150; $ok.Width = 95
+    $ok.DialogResult = [System.Windows.Forms.DialogResult]::OK
+    $cancel = New-Object System.Windows.Forms.Button
+    $cancel.Text = 'Cancel'; $cancel.Left = 375; $cancel.Top = 150; $cancel.Width = 95
+    $cancel.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
+    $form.Controls.AddRange(@($modeLabel,$mode,$scaleLabel,$scale,$saveRaw,$ok,$cancel))
+    $form.AcceptButton = $ok; $form.CancelButton = $cancel
+    if ($form.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { exit 2 }
+
+    $runArgs = @('run_seedvr2.py', $dialog.FileName, '--scale', $(if ($scale.SelectedIndex -eq 0) {'1.5'} else {'2.0'}))
+    switch ($mode.SelectedIndex) {
+      0 { $runArgs += @('--fusion-amount', '0.15') }
+      1 { $runArgs += @('--fusion-amount', '0.28') }
+      2 { $runArgs += @('--fusion-amount', '0.40') }
+      3 { $runArgs += '--raw-output-only' }
+    }
+    if ($saveRaw.Checked -and $mode.SelectedIndex -ne 3) { $runArgs += '--save-raw' }
+    & $python @runArgs
     if ($LASTEXITCODE -ne 0) { throw 'SeedVR2 inference failed' }
     Read-Host 'Processing finished. Press Enter to close'
   }

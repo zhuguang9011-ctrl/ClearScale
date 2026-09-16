@@ -16,5 +16,6 @@ for option in (
 ast.parse(text)
 py_compile.compile(str(root / "bootstrap.py"), doraise=True)
 py_compile.compile(str(root / "run_seedvr2.py"), doraise=True)
+py_compile.compile(str(root / "fidelity_fusion.py"), doraise=True)
 assert "seedvr2_ema_3b-Q4_K_M.gguf" in (source / "README.md").read_text(encoding="utf-8")
 print("Pinned SeedVR2 source and launcher scripts validated")
