@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from material_reference import apply_reference
+from material_reference import apply_color_reference, apply_reference
 
 
 with tempfile.TemporaryDirectory() as temporary:
@@ -48,5 +48,18 @@ with tempfile.TemporaryDirectory() as temporary:
         assert mode_output.exists()
         assert mode_report["reference_feature_mode"] == feature_mode
         assert mode_report["reference_color_transferred"] is False
+
+    color_output = root / "color.png"
+    color_reference = np.zeros((32, 32, 3), dtype=np.uint8)
+    color_reference[..., :3] = (210, 55, 90)
+    color_report = apply_color_reference(
+        source, color_reference, mask, color_output, strength=0.65
+    )
+    color_result = np.asarray(Image.open(color_output).convert("RGBA"))
+    assert np.array_equal(color_result[..., 3], base[..., 3])
+    base_luma = np.asarray(Image.fromarray(base[..., :3]).convert("L"), dtype=np.int16)
+    result_luma = np.asarray(Image.fromarray(color_result[..., :3]).convert("L"), dtype=np.int16)
+    assert np.mean(np.abs(result_luma[15:35, 15:35] - base_luma[15:35, 15:35])) < 2.0
+    assert color_report["target_luminance_preserved"] is True
 
 print("material reference test passed")

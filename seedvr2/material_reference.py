@@ -14,6 +14,56 @@ FEATURE_WEIGHTS = {
 }
 
 
+def _soft_mask(mask, size):
+    mask_image = Image.fromarray(np.uint8(mask)).convert("L").resize(size, Image.Resampling.BILINEAR)
+    mask_image = mask_image.filter(ImageFilter.GaussianBlur(3.0))
+    values = np.asarray(mask_image, dtype=np.float32) / 255.0
+    fraction = float(np.mean(values > 0.1))
+    if float(values.max()) < 0.05:
+        raise ValueError("Paint the target area before using a reference image")
+    if fraction < 0.01:
+        raise ValueError("Paint a larger target surface; the current mask covers less than 1% of the image")
+    return values, fraction
+
+
+def apply_color_reference(image_path, reference, mask, output_path, strength=0.65):
+    """Transfer robust reference chroma while preserving target luminance and alpha."""
+    image_path, output_path = Path(image_path), Path(output_path)
+    with Image.open(image_path) as image:
+        base_image = image.convert("RGBA")
+    width, height = base_image.size
+    mask_values, masked_fraction = _soft_mask(mask, (width, height))
+    base_ycc = np.asarray(base_image.convert("RGB").convert("YCbCr"), dtype=np.float32)
+    reference_ycc = np.asarray(
+        Image.fromarray(np.uint8(reference)).convert("RGB").convert("YCbCr"), dtype=np.float32
+    )
+    reference_chroma = np.median(reference_ycc[..., 1:3].reshape(-1, 2), axis=0)
+    blend = np.clip(float(strength), 0.0, 1.0) * mask_values[..., None]
+    result_ycc = base_ycc.copy()
+    result_ycc[..., 1:3] = (
+        base_ycc[..., 1:3] * (1.0 - blend) + reference_chroma[None, None, :] * blend
+    )
+    result_rgb = np.asarray(
+        Image.fromarray(np.uint8(np.clip(result_ycc, 0, 255)), mode="YCbCr").convert("RGB")
+    )
+    alpha = np.asarray(base_image)[..., 3:4]
+    result = np.concatenate([result_rgb, alpha], axis=2)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.fromarray(result, mode="RGBA").save(output_path, format="PNG")
+    report = {
+        "mode": "masked chroma-only reference transfer",
+        "strength": float(strength),
+        "masked_fraction": masked_fraction,
+        "target_luminance_preserved": True,
+        "target_alpha_preserved": True,
+        "reference_chroma_ycbcr": [float(value) for value in reference_chroma],
+    }
+    output_path.with_suffix(".color.json").write_text(
+        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return report
+
+
 def apply_reference(image_path, reference, mask, output_path, strength=1.2,
                     texture_size=320, feature_mode="auto"):
     image_path, output_path = Path(image_path), Path(output_path)
@@ -56,14 +106,7 @@ def apply_reference(image_path, reference, mask, output_path, strength=1.2,
     texture = np.tile(mirrored, ((height + pattern_size - 1) // pattern_size,
                                  (width + pattern_size - 1) // pattern_size))[:height, :width]
 
-    mask_image = Image.fromarray(np.uint8(mask)).convert("L").resize((width, height), Image.Resampling.BILINEAR)
-    mask_image = mask_image.filter(ImageFilter.GaussianBlur(3.0))
-    mask_values = np.asarray(mask_image, dtype=np.float32) / 255.0
-    masked_fraction = float(np.mean(mask_values > 0.1))
-    if float(mask_values.max()) < 0.05:
-        raise ValueError("Paint the target material area before using a reference image")
-    if masked_fraction < 0.01:
-        raise ValueError("Paint a larger target surface; the current mask covers less than 1% of the image")
+    mask_values, masked_fraction = _soft_mask(mask, (width, height))
 
     rgb = base[..., :3]
     luminance = rgb @ np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
