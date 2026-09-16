@@ -50,18 +50,25 @@ def image_pixels(value):
 
 
 def process(editor, color_reference, material_reference, arrangement_reference,
-            material_feature, mode, scale, save_raw, color_strength,
-            material_strength, arrangement_strength, texture_size):
-    background, mask = editor_parts(editor)
+            pose_reference, material_feature, mode, scale, save_raw, color_strength,
+            material_strength, arrangement_strength, texture_size,
+            pose_identity_strength, pose_structure_strength):
+    background, source_mask = editor_parts(editor)
     references = [color_reference, material_reference, arrangement_reference]
     has_reference = any(value is not None for value in references)
-    if has_reference and mask is None:
+    has_pose = pose_reference is not None
+    if (has_reference or has_pose) and source_mask is None:
         raise gr.Error("Paint the target material area before applying a reference")
-    mask_coverage = 0.0
-    if mask is not None:
-        mask_coverage = float(np.mean(mask > 25))
-    if has_reference and mask_coverage < 0.01:
+    source_mask_coverage = float(np.mean(source_mask > 25)) if source_mask is not None else 0.0
+    if (has_reference or has_pose) and source_mask_coverage < 0.01:
         raise gr.Error("Paint a larger material surface. The current painted area is less than 1% of the image.")
+    pose_background = pose_mask = None
+    if has_pose:
+        pose_background, pose_mask = editor_parts(pose_reference)
+        if pose_mask is None or float(np.mean(pose_mask > 25)) < 0.01:
+            raise gr.Error("Paint the desired product area on the pose/layout reference (at least 1%).")
+    mask = pose_mask if has_pose else source_mask
+    mask_coverage = float(np.mean(mask > 25)) if mask is not None else 0.0
     color_reference = image_pixels(color_reference) if color_reference is not None else None
     material_reference = image_pixels(material_reference) if material_reference is not None else None
     arrangement_reference = image_pixels(arrangement_reference) if arrangement_reference is not None else None
@@ -69,15 +76,43 @@ def process(editor, color_reference, material_reference, arrangement_reference,
     job.mkdir(parents=True, exist_ok=True)
     source = job / "source.png"
     Image.fromarray(np.uint8(background)).save(source)
+    source_for_seed = source
+    lines = []
+    if has_pose:
+        source_mask_path = job / "source_mask.png"
+        pose_path = job / "pose_reference.png"
+        pose_mask_path = job / "pose_mask.png"
+        pose_output = job / "pose_reconstructed.png"
+        Image.fromarray(np.uint8(source_mask)).save(source_mask_path)
+        Image.fromarray(np.uint8(pose_background)).save(pose_path)
+        Image.fromarray(np.uint8(pose_mask)).save(pose_mask_path)
+        pose_command = [
+            sys.executable, str(ROOT / "run_pose_reference.py"), str(source),
+            str(source_mask_path), str(pose_path), str(pose_mask_path), str(pose_output),
+            "--identity-strength", str(pose_identity_strength),
+            "--pose-strength", str(pose_structure_strength),
+        ]
+        lines.append("POSE STAGE: optional models install/download only on first use")
+        yield [], "\n".join(lines), None
+        pose_process = subprocess.Popen(
+            pose_command, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, encoding="utf-8", errors="replace",
+        )
+        assert pose_process.stdout is not None
+        for line in pose_process.stdout:
+            lines.append(line.rstrip())
+            yield [], "\n".join(lines[-18:]), None
+        if pose_process.wait():
+            raise gr.Error("Pose reconstruction failed. The three deterministic reference channels were not run.")
+        source_for_seed = pose_output
     amounts = {"Fidelity 15%": 0.15, "Balanced 28%": 0.28, "Detail 40%": 0.40}
-    command = [sys.executable, str(ROOT / "run_seedvr2.py"), str(source), "--scale", str(scale), "--no-explorer"]
+    command = [sys.executable, str(ROOT / "run_seedvr2.py"), str(source_for_seed), "--scale", str(scale), "--no-explorer"]
     if mode == "Raw SeedVR2":
         command += ["--raw-output-only"]
     else:
         command += ["--fusion-amount", str(amounts[mode])]
         if save_raw:
             command += ["--save-raw"]
-    lines = []
     if has_reference:
         lines.append(f"Reference mask coverage: {mask_coverage * 100:.1f}%")
         yield [], "\n".join(lines), None
@@ -94,6 +129,8 @@ def process(editor, color_reference, material_reference, arrangement_reference,
     raw = sorted(job.glob("*_SeedVR2_raw_*.png"))
     final = (candidates or raw)[-1]
     gallery = [(str(source), "Source")]
+    if has_pose:
+        gallery.append((str(source_for_seed), "Experimental pose/layout reconstruction"))
     if raw:
         gallery.append((str(raw[-1]), "Raw SeedVR2"))
     if has_reference and mode != "Raw SeedVR2":
@@ -146,7 +183,7 @@ def build_ui():
     .panel {border:1px solid #343841 !important; border-radius:12px !important; background:#1d2026 !important}
     """
     with gr.Blocks(title="ClearScale Material Studio", css=css, theme=gr.themes.Base()) as demo:
-        gr.Markdown("# ClearScale Material Studio\n颜色、材质和排列使用独立可选参考图；未上传的参考通道会自动跳过。产品姿态/摆放将由单独生成式阶段处理。")
+        gr.Markdown("# ClearScale Material Studio\n四个参考通道均可留空。姿态/摆放属于实验性生成阶段，首次使用会额外安装并下载模型；其他三个通道保持确定性处理。")
         with gr.Row():
             with gr.Column(scale=5, elem_classes="panel"):
                 editor = gr.ImageEditor(label="1. 原图 — 使用参考材质时，涂满目标产品表面", type="numpy")
@@ -157,6 +194,11 @@ def build_ui():
                         material_reference = gr.ImageEditor(label="参考颗粒、纤维、光泽或哑光", type="numpy")
                     with gr.Tab("排列参考（可空）"):
                         arrangement_reference = gr.ImageEditor(label="参考线距、织法和方向性排列", type="numpy")
+                    with gr.Tab("姿态 / 摆放参考（实验，可空）"):
+                        pose_reference = gr.ImageEditor(
+                            label="参考整个产品的朝向、透视与构图；请涂满参考图中的目标产品区域",
+                            type="numpy",
+                        )
             with gr.Column(scale=3, elem_classes="panel"):
                 mode = gr.Dropdown(["Fidelity 15%", "Balanced 28%", "Detail 40%", "Raw SeedVR2"], value="Balanced 28%", label="Detail mode")
                 scale = gr.Radio([1.5, 2.0], value=2.0, label="Output scale")
@@ -170,14 +212,19 @@ def build_ui():
                 material_strength = gr.Slider(0.0, 12.0, value=4.0, step=0.5, label="材质参考强度")
                 arrangement_strength = gr.Slider(0.0, 12.0, value=4.0, step=0.5, label="排列参考强度")
                 texture_size = gr.Slider(128, 640, value=320, step=32, label="材质 / 排列尺度")
+                with gr.Accordion("实验性姿态 / 摆放参数", open=False):
+                    pose_identity_strength = gr.Slider(0.3, 1.0, value=0.75, step=0.05, label="产品身份保持强度")
+                    pose_structure_strength = gr.Slider(0.3, 1.2, value=0.90, step=0.05, label="姿态结构强度")
+                    gr.Markdown("姿态阶段会重建画面，不能保证文字或细小孔位完全一致；建议先用无文字的产品图测试。")
                 run = gr.Button("Enhance", variant="primary")
                 status = gr.Textbox(label="Console", lines=18)
             with gr.Column(scale=5, elem_classes="panel"):
                 gallery = gr.Gallery(label="3. 最终结果", columns=1, height=720, object_fit="contain")
                 download = gr.File(label="下载最终 PNG（文件名会列出实际使用的参考通道）")
         run.click(process, [editor, color_reference, material_reference, arrangement_reference,
-                            material_feature, mode, scale, save_raw, color_strength,
-                            material_strength, arrangement_strength, texture_size],
+                            pose_reference, material_feature, mode, scale, save_raw, color_strength,
+                            material_strength, arrangement_strength, texture_size,
+                            pose_identity_strength, pose_structure_strength],
                   [gallery, status, download])
     return demo.queue(default_concurrency_limit=1)
 
