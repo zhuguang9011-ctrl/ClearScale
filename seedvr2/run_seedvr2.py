@@ -1,5 +1,7 @@
+import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -15,12 +17,18 @@ def main():
         raise SystemExit("Expected one input image")
     source = Path(sys.argv[1]).resolve()
     with Image.open(source) as image:
-        width, height = ImageOps.exif_transpose(image).size
+        normalized = ImageOps.exif_transpose(image)
+        width, height = normalized.size
     short = min(width, height)
     target_short = min(2048, max(1024, short * 2))
     output = source.with_name(f"{source.stem}_SeedVR2_{datetime.now():%Y%m%d_%H%M%S}.png")
+    job = Path(tempfile.mkdtemp(prefix="clearscale_seedvr2_"))
+    staged_input = job / "input.png"
+    staged_output = job / "output.png"
+    with Image.open(source) as image:
+        ImageOps.exif_transpose(image).save(staged_input, format="PNG")
     command = [
-        sys.executable, str(CLI), str(source), "--output", str(output), "--output_format", "png",
+        sys.executable, str(CLI), str(staged_input), "--output", str(staged_output), "--output_format", "png",
         "--dit_model", "seedvr2_ema_3b-Q4_K_M.gguf",
         "--resolution", str(target_short), "--max_resolution", "3072", "--batch_size", "1",
         "--seed", "42", "--color_correction", "lab", "--input_noise_scale", "0",
@@ -31,18 +39,36 @@ def main():
         "--vae_encode_tile_overlap", "64", "--vae_decode_tile_overlap", "64",
         "--attention_mode", "sdpa", "--debug",
     ]
+    inference_log = ROOT / "inference.log"
     print(f"Input: {width}x{height}; requested short side: {target_short}", flush=True)
-    subprocess.run(command, cwd=CLI.parent, check=True)
-    if not output.exists():
-        raise RuntimeError(f"CLI finished without expected output: {output}")
-    with Image.open(output) as result:
-        result.verify()
-    print(f"SUCCESS: {output}", flush=True)
-    verifier = ROOT / "verify_result.py"
-    if verifier.exists():
-        subprocess.run([sys.executable, str(verifier), str(source), str(output)], check=False)
-    if sys.platform == "win32":
-        subprocess.run(["explorer.exe", "/select,", str(output)], check=False)
+    print(f"Full inference log: {inference_log}", flush=True)
+    try:
+        with inference_log.open("w", encoding="utf-8") as log:
+            process = subprocess.Popen(
+                command, cwd=CLI.parent, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace",
+            )
+            assert process.stdout is not None
+            for line in process.stdout:
+                print(line, end="", flush=True)
+                log.write(line)
+                log.flush()
+            code = process.wait()
+        if code:
+            raise RuntimeError(f"SeedVR2 exited with code {code}. Read: {inference_log}")
+        if not staged_output.exists():
+            raise RuntimeError(f"CLI finished without expected output. Read: {inference_log}")
+        with Image.open(staged_output) as result:
+            result.verify()
+        shutil.copy2(staged_output, output)
+        print(f"SUCCESS: {output}", flush=True)
+        verifier = ROOT / "verify_result.py"
+        if verifier.exists():
+            subprocess.run([sys.executable, str(verifier), str(source), str(output)], check=False)
+        if sys.platform == "win32":
+            subprocess.run(["explorer.exe", f'/select,"{output}"'], check=False)
+    finally:
+        shutil.rmtree(job, ignore_errors=True)
 
 
 if __name__ == "__main__":

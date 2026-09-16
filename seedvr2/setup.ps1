@@ -45,6 +45,7 @@ try {
     if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { exit 2 }
     & $python run_seedvr2.py $dialog.FileName
     if ($LASTEXITCODE -ne 0) { throw 'SeedVR2 inference failed' }
+    Read-Host 'Processing finished. Press Enter to close'
   }
 } catch {
   Write-Host $_ -ForegroundColor Red

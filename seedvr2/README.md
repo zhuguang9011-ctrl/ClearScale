@@ -8,6 +8,8 @@
 4. 固定使用 3B Q4 GGUF、32 层 BlockSwap、CPU 卸载、512px VAE 分块、LAB 颜色校正、零噪声注入。无需手动调参数。
 5. 输出保存在原图旁边，文件名含 `_SeedVR2_`；结束后自动定位输出文件，并生成验证报告。
 
+启动器会先把图片转换到临时英文路径，规避 Windows/OpenCV 对中文安装目录和中文文件名的兼容问题，完成后再复制回原图目录。完整模型输出写入 `inference.log`；成功或失败后窗口会保留提示，不会无提示关闭。
+
 测试时只判断五件事：孔位/开窗有没有改变、轮廓有没有白边、颜色是否偏移、表面是否仍有涂抹感、细节是否比普通放大更可信。任何一项明显失败，就不进入正式版。
 
 代码来源固定为 [numz/ComfyUI-SeedVR2_VideoUpscaler](https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler) 提交 `4490bd1f482e026674543386bb2a4d176da245b9`，其代码使用 Apache-2.0。模型会从上游配置的 Hugging Face 仓库自动下载，模型权重许可需以对应模型页面为准。
