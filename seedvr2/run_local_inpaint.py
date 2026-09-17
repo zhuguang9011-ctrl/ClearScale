@@ -32,6 +32,34 @@ def prepare(source, mask, guide, resolution=512, padding=64):
             square(guide.convert('RGB'),(127,127,127),Image.Resampling.LANCZOS),
             {'box':box,'side':side,'offset':offset,'crop_size':size})
 
+def regular_control(mask, meta, spacing=10, angle=0, curvature=.35, resolution=512):
+    """Analytic ridge contours in source coordinates; never trace old grooves."""
+    hard = np.asarray(mask.convert('L')) > 25
+    ys, xs = np.where(hard)
+    if len(xs) < 64:
+        raise ValueError('请先涂抹线材区域')
+    cx, cy = (xs.min()+xs.max())/2, (ys.min()+ys.max())/2
+    radius = max(1, xs.max()-xs.min(), ys.max()-ys.min())
+    scale = meta['side']/resolution
+    if spacing/scale < 4:
+        raise ValueError(f'当前线距在模型中仅 {spacing/scale:.1f} 像素，请缩小选区或增大线距，至少达到 4 像素')
+    yy, xx = np.mgrid[:resolution,:resolution].astype(float)
+    xx = (xx+.5)*scale + meta['box'][0]-meta['offset'][0]-.5-cx
+    yy = (yy+.5)*scale + meta['box'][1]-meta['offset'][1]-.5-cy
+    theta = np.deg2rad(angle)
+    normal = xx*np.cos(theta)+yy*np.sin(theta)
+    along = -xx*np.sin(theta)+yy*np.cos(theta)
+    phase = (normal-curvature*along**2/radius)/spacing
+    # Approximate one-pixel contour width, independent of color/contrast.
+    gradient = np.sqrt(1+(2*curvature*along/radius)**2)*scale/spacing
+    distance = np.abs(phase-np.rint(phase))
+    edges = (distance <= .55*gradient).astype('uint8')*255
+    box=meta['box']; side=meta['side']; offset=meta['offset']
+    tile=Image.new('L',(side,side)); tile.paste(mask.crop(box),offset)
+    selected=np.asarray(tile.resize((resolution,resolution),Image.Resampling.NEAREST))>25
+    edges[~selected]=0
+    return Image.fromarray(edges).convert('RGB')
+
 def stitch(source, mask, generated, meta, feather=4, preserve_color=True):
     base=np.asarray(source.convert('RGBA')).copy()
     box=meta['box']; x,y=meta['offset']; w,h=meta['crop_size']
@@ -39,6 +67,12 @@ def stitch(source, mask, generated, meta, feather=4, preserve_color=True):
     original=source.crop(box).convert('RGB')
     if preserve_color:
         old=np.asarray(original.convert('YCbCr')).copy()
+        selected=(np.asarray(mask.crop(box).convert('L'))>25).astype('uint8')
+        def blur(a):
+            return np.asarray(Image.fromarray(a.astype('uint8')).filter(ImageFilter.GaussianBlur(12)),dtype=float)
+        weights=blur(selected*255)/255
+        for channel in (1,2):
+            old[...,channel]=np.clip(blur(old[...,channel]*selected)/np.maximum(weights,1/255),0,255).astype('uint8')
         old[...,0]=np.asarray(patch.convert('YCbCr'))[...,0]
         patch=Image.fromarray(old,'YCbCr').convert('RGB')
     hard=np.asarray(mask.convert('L'))>25
@@ -74,21 +108,25 @@ def main():
     p.add_argument('--control',type=float,default=.8)
     p.add_argument('--reference-strength',type=float,default=.35)
     p.add_argument('--seed',type=int,default=42)
+    p.add_argument('--spacing',type=float,default=10)
+    p.add_argument('--angle',type=float,default=0)
+    p.add_argument('--curvature',type=float,default=.35)
     p.add_argument('--worker',action='store_true')
     args=p.parse_args()
     ensure_environment()
     import torch
-    import cv2
     from diffusers import StableDiffusionControlNetInpaintPipeline, ControlNetModel, UniPCMultistepScheduler
     if not torch.cuda.is_available(): raise RuntimeError('CUDA GPU unavailable')
     source=ImageOps.exif_transpose(Image.open(args.source)).convert('RGBA')
     mask=Image.open(args.mask).convert('L'); guide=Image.open(args.guide).convert('RGB')
     image,local_mask,local_guide,meta=prepare(source,mask,guide)
-    # Use the cleaned guide instead of the original irregular strand edges.
-    edges=cv2.Canny(np.asarray(local_guide),60,140)
-    control=Image.fromarray(edges).convert('RGB')
+    control=regular_control(mask,meta,args.spacing,args.angle,args.curvature)
+    # Initialize selected pixels from rebuilt ridges, not the irregular source.
+    original_crop=image
+    image=Image.composite(local_guide,image,local_mask)
     args.output.parent.mkdir(parents=True,exist_ok=True)
     control.save(args.output.parent/'control_preview.png')
+    original_crop.save(args.output.parent/'crop_original.png')
     image.save(args.output.parent/'crop_input.png'); local_mask.save(args.output.parent/'crop_mask.png')
     print('Loading inpaint models; first run downloads weights',flush=True)
     net=ControlNetModel.from_pretrained('lllyasviel/control_v11p_sd15_canny',torch_dtype=torch.float16)
@@ -107,7 +145,7 @@ def main():
         raise RuntimeError('生成结果被模型过滤，请调整输入后重试')
     patch=result.images[0]; patch.save(args.output.parent/'generated_crop.png')
     stitch(source,mask,patch,meta).save(args.output)
-    args.output.with_suffix('.json').write_text(json.dumps({'crop':meta,'strength':args.strength,'control':args.control,'seed':args.seed,'reference_used':bool(args.reference),'preserve_chroma':True},ensure_ascii=False,indent=2),encoding='utf-8')
+    args.output.with_suffix('.json').write_text(json.dumps({'crop':meta,'strength':args.strength,'control':args.control,'seed':args.seed,'reference_used':bool(args.reference),'preserve_chroma':'low-pass original chroma', 'version':'regular-guide-v2', 'spacing':args.spacing,'angle':args.angle,'curvature':args.curvature,'prompt':args.prompt,'reference_strength':args.reference_strength,'masked_fraction':float((np.asarray(mask)>25).mean())},ensure_ascii=False,indent=2),encoding='utf-8')
     print('INPAINT SUCCESS',flush=True)
 
 if __name__=='__main__': main()

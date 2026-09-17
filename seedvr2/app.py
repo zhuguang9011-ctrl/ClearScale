@@ -261,7 +261,7 @@ def local_inpaint(source, editor, reference, spacing, angle, curvature, contrast
         raise gr.Error("请先上传原图")
     mask = editor_mask(editor)
     try:
-        guide, _ = rebuild(Image.fromarray(np.uint8(source)), mask, spacing, angle, curvature, contrast)
+        guide, guide_report = rebuild(Image.fromarray(np.uint8(source)), mask, spacing, angle, curvature, contrast)
     except ValueError as exc:
         raise gr.Error(str(exc))
     job = OUTPUTS / datetime.now().strftime("inpaint_%Y%m%d_%H%M%S_%f")
@@ -271,21 +271,33 @@ def local_inpaint(source, editor, reference, spacing, angle, curvature, contrast
     Image.fromarray(np.uint8(source)).save(src)
     Image.fromarray(np.uint8(mask)).save(mask_path)
     guide.save(guide_path)
+    from run_local_inpaint import prepare, regular_control
+    mask_image = Image.fromarray(np.uint8(mask))
+    _, _, _, meta = prepare(Image.fromarray(np.uint8(source)), mask_image, guide)
+    try:
+        control_preview = regular_control(mask_image, meta, spacing, angle, curvature)
+    except ValueError as exc:
+        raise gr.Error(str(exc))
+    control_path = job/'control_preview.png'
+    control_preview.save(control_path)
+    (job/'guide_parameters.json').write_text(json.dumps(guide_report, ensure_ascii=False, indent=2), encoding='utf-8')
+    preview = [(str(mask_path), '实际修改范围：白色区域'), (str(guide_path), '重建输入'), (str(control_path), '规则排列引导')]
     command = [sys.executable, str(ROOT/'run_local_inpaint.py'), str(src), str(mask_path),
                str(guide_path), str(output), '--strength', str(strength), '--control', str(control),
+               '--spacing', str(spacing), '--angle', str(angle), '--curvature', str(curvature),
                '--reference-strength', str(reference_strength), '--seed', str(int(seed)), '--prompt', prompt]
     if reference_present(reference) and reference_strength > 0:
         ref = job / 'material_reference.png'
         Image.fromarray(np.uint8(image_pixels(reference))).save(ref)
         command += ['--reference', str(ref)]
-    lines = ['开始局部重绘；首次运行需要联网下载模型。日志：'+str(job/'inpaint.log')]
-    yield [(str(guide_path), '结构引导预览')], lines[0], None
+    lines = [f'本次仅修改整图的 {guide_report["masked_fraction"]:.2%}；白色蒙版外不修改。', '开始局部重绘；日志：'+str(job/'inpaint.log')]
+    yield preview, '\n'.join(lines), None
     with (job/'inpaint.log').open('w',encoding='utf-8') as log:
         child = subprocess.Popen(command, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                  text=True, encoding='utf-8', errors='replace')
         for line in child.stdout:
             log.write(line); log.flush(); lines.append(line.rstrip())
-            yield [(str(guide_path), '结构引导预览')], '\n'.join(lines[-18:]), None
+            yield preview, '\n'.join(lines[-18:]), None
         code = child.wait()
     if code or not output.exists():
         raise gr.Error('局部重绘未完成，请提供 '+str(job/'inpaint.log'))
@@ -298,7 +310,7 @@ def build_ui():
     .panel {border:1px solid #343841 !important; border-radius:12px !important; background:#1d2026 !important}
     """
     with gr.Blocks(title="ClearScale Material Studio", css=css, theme=gr.themes.Base()) as demo:
-        gr.Markdown("# ClearScale Material Studio · 局部重绘试验版\n四个参考通道均可留空。姿态/摆放属于实验性生成阶段，首次使用会额外安装并下载模型；其他三个通道保持确定性处理。")
+        gr.Markdown("# ClearScale Material Studio · 规则排列引导 v2\n四个参考通道均可留空。姿态/摆放属于实验性生成阶段，首次使用会额外安装并下载模型；其他三个通道保持确定性处理。")
         with gr.Row():
             with gr.Column(scale=5, elem_classes="panel"):
                 source_upload = gr.Image(label="1. 原图文件（必填）", type="numpy")

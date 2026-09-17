@@ -18,3 +18,15 @@ try: prepare(source,Image.new('L',source.size),source)
 except ValueError: pass
 else: raise AssertionError('empty mask accepted')
 print('PASS: edge crops, square padding, exact outside-mask and alpha preservation, empty mask rejection')
+
+from run_local_inpaint import regular_control
+m=Image.new('L',(256,256),255)
+_,_,_,meta=prepare(Image.new('RGB',m.size),m,Image.new('RGB',m.size),256,0)
+c=np.asarray(regular_control(m,meta,spacing=16,angle=0,curvature=0,resolution=256))[:,:,0]
+assert np.array_equal(c[20],c[220]), 'straight contours must not change between rows'
+assert np.array_equal(c[:,32:224],c[:,16:208]), 'line period is not 16 px'
+assert c.max()==255 and c.min()==0
+try: regular_control(m,meta,spacing=1,resolution=256)
+except ValueError: pass
+else: raise AssertionError('undersampled lines accepted')
+print('PASS: analytic control periodicity and undersampling rejection')
