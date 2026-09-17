@@ -254,13 +254,51 @@ def preview_filaments(source, editor, spacing, angle, curvature, contrast):
     return [(source, "原图"), (str(output), "手动线材重建 · 原图尺寸")], str(output)
 
 
+def local_inpaint(source, editor, reference, spacing, angle, curvature, contrast,
+                  strength, control, reference_strength, seed, prompt):
+    from filament_rebuild import rebuild
+    if source is None:
+        raise gr.Error("请先上传原图")
+    mask = editor_mask(editor)
+    try:
+        guide, _ = rebuild(Image.fromarray(np.uint8(source)), mask, spacing, angle, curvature, contrast)
+    except ValueError as exc:
+        raise gr.Error(str(exc))
+    job = OUTPUTS / datetime.now().strftime("inpaint_%Y%m%d_%H%M%S_%f")
+    job.mkdir(parents=True, exist_ok=True)
+    src = job / 'source.png'; mask_path = job / 'mask.png'; guide_path = job / 'guide.png'
+    output = job / 'local_inpaint.png'
+    Image.fromarray(np.uint8(source)).save(src)
+    Image.fromarray(np.uint8(mask)).save(mask_path)
+    guide.save(guide_path)
+    command = [sys.executable, str(ROOT/'run_local_inpaint.py'), str(src), str(mask_path),
+               str(guide_path), str(output), '--strength', str(strength), '--control', str(control),
+               '--reference-strength', str(reference_strength), '--seed', str(int(seed)), '--prompt', prompt]
+    if reference_present(reference) and reference_strength > 0:
+        ref = job / 'material_reference.png'
+        Image.fromarray(np.uint8(image_pixels(reference))).save(ref)
+        command += ['--reference', str(ref)]
+    lines = ['开始局部重绘；首次运行需要联网下载模型。日志：'+str(job/'inpaint.log')]
+    yield [(str(guide_path), '结构引导预览')], lines[0], None
+    with (job/'inpaint.log').open('w',encoding='utf-8') as log:
+        child = subprocess.Popen(command, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                 text=True, encoding='utf-8', errors='replace')
+        for line in child.stdout:
+            log.write(line); log.flush(); lines.append(line.rstrip())
+            yield [(str(guide_path), '结构引导预览')], '\n'.join(lines[-18:]), None
+        code = child.wait()
+    if code or not output.exists():
+        raise gr.Error('局部重绘未完成，请提供 '+str(job/'inpaint.log'))
+    yield [(str(src),'原图'),(str(output),'局部重绘结果（原图尺寸）')], '完成：'+str(output), str(output)
+
+
 def build_ui():
     css = """
     .gradio-container {max-width: 1600px !important; background:#15171b}
     .panel {border:1px solid #343841 !important; border-radius:12px !important; background:#1d2026 !important}
     """
     with gr.Blocks(title="ClearScale Material Studio", css=css, theme=gr.themes.Base()) as demo:
-        gr.Markdown("# ClearScale Material Studio · 线材重建试验版\n四个参考通道均可留空。姿态/摆放属于实验性生成阶段，首次使用会额外安装并下载模型；其他三个通道保持确定性处理。")
+        gr.Markdown("# ClearScale Material Studio · 局部重绘试验版\n四个参考通道均可留空。姿态/摆放属于实验性生成阶段，首次使用会额外安装并下载模型；其他三个通道保持确定性处理。")
         with gr.Row():
             with gr.Column(scale=5, elem_classes="panel"):
                 source_upload = gr.Image(label="1. 原图文件（必填）", type="numpy")
@@ -302,17 +340,29 @@ def build_ui():
                     line_curve = gr.Slider(-2, 2, value=.35, step=.05, label="弯曲程度")
                     line_contrast = gr.Slider(0, .4, value=.12, step=.01, label="线纹明暗强度")
                     rebuild_button = gr.Button("预览并保存线材重建（无需 GPU）")
-                run = gr.Button("Enhance", variant="primary")
+                with gr.Accordion("AI 局部重绘（试验，使用上面的曲线参数）", open=True):
+                    gr.Markdown("先预览曲线并调好方向，再运行 AI 重绘。只读取材质参考；其他参考不参与本按钮。首次下载模型，输出为原图尺寸。")
+                    inpaint_strength = gr.Slider(.2, 1, value=.65, step=.05, label="重绘强度")
+                    inpaint_control = gr.Slider(0, 1.5, value=.8, step=.05, label="排列约束强度")
+                    inpaint_reference = gr.Slider(0, 1, value=.35, step=.05, label="材质图引导强度（留空自动跳过）")
+                    inpaint_seed = gr.Number(value=42, precision=0, label="随机种子")
+                    inpaint_prompt = gr.Textbox(value="macro product photograph of neatly wound plastic filament, consistent strand thickness, smooth continuous parallel curved strands, realistic surface reflections", label="局部重绘描述（建议英文）")
+                    inpaint_button = gr.Button("执行 AI 局部重绘", variant="primary")
+                run = gr.Button("仅高清放大 / 纹理叠加（不执行重绘）")
                 status = gr.Textbox(label="Console", lines=18)
             with gr.Column(scale=5, elem_classes="panel"):
                 gallery = gr.Gallery(label="3. 最终结果", columns=1, height=720, object_fit="contain")
                 download = gr.File(label="下载最终 PNG（文件名会列出实际使用的参考通道）")
         rebuild_button.click(preview_filaments, [source_upload, editor, line_spacing, line_angle, line_curve, line_contrast], [gallery, download])
+        inpaint_button.click(local_inpaint, [source_upload, editor, material_reference,
+                            line_spacing, line_angle, line_curve, line_contrast,
+                            inpaint_strength, inpaint_control, inpaint_reference,
+                            inpaint_seed, inpaint_prompt], [gallery, status, download], concurrency_id="gpu")
         run.click(process, [source_upload, editor, color_reference, material_reference, arrangement_reference,
                             pose_reference, material_feature, mode, scale, save_raw, color_strength,
                             material_strength, arrangement_strength, texture_size,
                             pose_identity_strength, pose_structure_strength],
-                  [gallery, status, download])
+                  [gallery, status, download], concurrency_id="gpu")
     return demo.queue(default_concurrency_limit=1)
 
 
