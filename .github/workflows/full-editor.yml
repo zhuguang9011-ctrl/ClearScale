@@ -1,0 +1,31 @@
+name: Full existing-model editor assembly
+on:
+  push:
+    branches: [development/surface-cleanup]
+    paths: ['existing-tools/full/**', '.github/workflows/full-editor.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  assemble:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Assemble applications runtime models and validate backend
+        run: python existing-tools/full/build.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Product-Editor-Full-Windows-NVIDIA
+          path: existing-tools/full/dist/Product-Editor-Full/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: Assembly-diagnostics
+          path: existing-tools/full/dist/Product-Editor-Full/*.log

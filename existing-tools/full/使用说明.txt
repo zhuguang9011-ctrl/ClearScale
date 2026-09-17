@@ -1,0 +1,30 @@
+产品编辑完整装配包（Windows NVIDIA）
+
+本包将官方 Krita 5.3.2.1、Krita AI Diffusion 1.53.0、配套 ComfyUI 和节点、Python、CUDA 版 PyTorch、RealVisXL、Fooocus Inpaint、IP-Adapter、CLIP Vision、Hyper-SD、OmniSR、LaMa 放在一起。
+没有自研图像重绘算法。不是所有模型大合集。
+
+使用：
+1. 完整解压到空间足够的目录，例如 D:\ProductEditor。不要在压缩包里启动。
+2. 关闭其他 Krita 窗口，双击 START.cmd。它先启动后端，再启动 Krita；关闭 Krita 时会关闭这个后端。
+3. 在 Krita 打开产品图片。设置 → 停靠面板 → AI Image Generation。
+4. 插件若未显示：设置 → 配置 Krita → Python 插件管理器，勾选 AI Diffusion，退出后重新双击 START.cmd。
+5. 选 RealVis/Photography 对应样式。先圈选背景测试，再单独选择线材测试。参考图用 Reference 控制层添加。
+6. 文件 → 另存为 KRA 保存图层；文件 → 导出 PNG 保存最终图片，位置由你选择。后端输出目录为 outputs。
+7. 换背景、参考材质、重绘、放大使用现成插件的内置流程。不要同时要求换背景、换材质和重排线材。
+
+换背景描述：
+A clean light blue-gray photography studio, soft diffused lighting, a natural contact shadow on a matte tabletop, minimal empty background, no text, no extra objects.
+
+换线材材质描述：
+Neatly wound translucent red PETG filament, consistent strand diameter, smooth parallel winding following the spool curvature, realistic subtle highlights, clean product photography.
+
+原图保留为独立备份图层；只选择需要修改的部分，不能靠提示词保证标签和孔位不变。检查结果后再2倍放大。
+原料精确改色优先用颜色调整。参考模型不保证能严格分开颜色、排列和材质；不承诺一键修好绕线。
+
+内置模型用于选区重绘、参考图和放大。没有打包 Qwen/FLUX 编辑模型、姿态/深度预处理模型或在线翻译；额外功能可能要求联网下载。
+MAT 模型标注非商用，因此本包改用上游已经支持的 LaMa；没有修改模型算法。
+模型与第三方软件各自许可证适用，参阅 licenses、sources 和各组件内的许可证。
+
+验证范围看 validation.json：Windows 后端启动、节点识别、模型文件校验。构建机器没有 NVIDIA 显卡；尚未验证 RTX 5060 Ti 推理速度、显存或画质，也未验证 Krita GUI 自动启用。
+显卡驱动需支持本包 CUDA 版本；启动失败看 logs/backend.log。不要关闭杀毒软件来绕过错误。
+配置与日志保存在本目录 profile 和 logs。不要删除旧软件或旧模型来安装本包。

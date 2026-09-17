@@ -1,0 +1,105 @@
+[
+  {
+    "alternatives": [
+      "models/clip_vision/SD1.5/model.safetensors",
+      "models/clip_vision/SD1.5/pytorch_model.bin"
+    ],
+    "files": [
+      {
+        "path": "models/clip_vision/clip-vision_vit-h.safetensors",
+        "sha256": "6ca9667da1ca9e0b0f75e46bb030f7e011f44f86cbfb8d5a36590fcd7507b030",
+        "url": "https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors"
+      }
+    ],
+    "id": [
+      "clip_vision-ip_adapter-sd15",
+      "clip_vision-ip_adapter-sdxl"
+    ],
+    "name": "CLIP Vision"
+  },
+  {
+    "files": [
+      {
+        "id": "upscaler-fast_2x-all",
+        "path": "models/upscale_models/OmniSR_X2_DIV2K.safetensors",
+        "sha256": "79408fc23203bf161faa957c4a602cc40521ed2235a72d976bd9d375e6644611",
+        "url": "https://huggingface.co/Acly/Omni-SR/resolve/main/OmniSR_X2_DIV2K.safetensors"
+      },
+      {
+        "id": "upscaler-fast_3x-all",
+        "path": "models/upscale_models/OmniSR_X3_DIV2K.safetensors",
+        "sha256": "4fb0b68fc314f798d2ddcf1f3d2253045ba3d959d8b9ae270c5a99b9f862ee12",
+        "url": "https://huggingface.co/Acly/Omni-SR/resolve/main/OmniSR_X3_DIV2K.safetensors"
+      },
+      {
+        "id": "upscaler-fast_4x-all",
+        "path": "models/upscale_models/OmniSR_X4_DIV2K.safetensors",
+        "sha256": "dff25e4ed392cb5cbe534d920e292063a0555df9281c54c5ec321490a2a59832",
+        "url": "https://huggingface.co/Acly/Omni-SR/resolve/main/OmniSR_X4_DIV2K.safetensors"
+      }
+    ],
+    "id": "upscaler-fast_4x-all",
+    "name": "OmniSR Superscale"
+  },
+  {
+    "files": [
+      {
+        "path": "models/ipadapter/ip-adapter_sdxl_vit-h.safetensors",
+        "sha256": "ebf05d918348aec7abb02a5e9ecef77e0aaea6914a5c4ea13f50d45eb1681831",
+        "url": "https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter_sdxl_vit-h.safetensors"
+      }
+    ],
+    "id": "ip_adapter-reference-sdxl",
+    "name": "IP-Adapter (SDXL)"
+  },
+  {
+    "files": [
+      {
+        "path": "models/loras/Hyper-SDXL-8steps-CFG-lora.safetensors",
+        "sha256": "55b51334c85061afff5eff7c550b61963c8b8607a5868bbe4f26db49374719b1",
+        "url": "https://huggingface.co/ByteDance/Hyper-SD/resolve/main/Hyper-SDXL-8steps-CFG-lora.safetensors"
+      }
+    ],
+    "id": "lora-hyper-sdxl",
+    "name": "Hyper-SD LoRA (SDXL)"
+  },
+  {
+    "files": [
+      {
+        "id": "inpaint-fooocus_head-sdxl",
+        "path": "models/inpaint/fooocus_inpaint_head.pth",
+        "sha256": "32f7f838e0c6d8f13437ba8411e77a4688d77a2e34df8857e4ef4d51f6b97692",
+        "url": "https://huggingface.co/lllyasviel/fooocus_inpaint/resolve/main/fooocus_inpaint_head.pth"
+      },
+      {
+        "id": "inpaint-fooocus_patch-sdxl",
+        "path": "models/inpaint/inpaint_v26.fooocus.patch",
+        "sha256": "f8657a025104e22d70f9c060635d8e8c2196f433871a2f68dc40abd2171f0d59",
+        "url": "https://huggingface.co/lllyasviel/fooocus_inpaint/resolve/main/inpaint_v26.fooocus.patch"
+      }
+    ],
+    "id": "inpaint-fooocus-sdxl",
+    "name": "Fooocus Inpaint"
+  },
+  {
+    "files": [
+      {
+        "path": "models/checkpoints/RealVisXL_V5.0_fp16.safetensors",
+        "sha256": "6a35a7855770ae9820a3c931d4964c3817b6d9e3c6f9c4dabb5b3a94e5643b80",
+        "url": "https://huggingface.co/SG161222/RealVisXL_V5.0/resolve/main/RealVisXL_V5.0_fp16.safetensors"
+      }
+    ],
+    "id": "checkpoint-realvis-sdxl",
+    "name": "RealVis (SDXL - Photography)"
+  },
+  {
+    "name": "LaMa",
+    "id": "inpaint-default-all",
+    "files": [
+      {
+        "path": "models/inpaint/big-lama.pt",
+        "url": "https://github.com/Sanster/models/releases/download/add_big_lama/big-lama.pt"
+      }
+    ]
+  }
+]
