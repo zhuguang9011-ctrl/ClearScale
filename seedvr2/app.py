@@ -272,11 +272,14 @@ def local_inpaint(source, editor, reference, spacing, angle, curvature, contrast
     Image.fromarray(np.uint8(source)).save(src)
     Image.fromarray(np.uint8(mask)).save(mask_path)
     guide.save(guide_path)
-    from run_local_inpaint import prepare, regular_control
+    from run_local_inpaint import choose_model_resolution, prepare, regular_control
     mask_image = Image.fromarray(np.uint8(mask))
-    _, _, _, meta = prepare(Image.fromarray(np.uint8(source)), mask_image, guide)
+    resolution = choose_model_resolution(mask_image, spacing)
+    _, _, _, meta = prepare(Image.fromarray(np.uint8(source)), mask_image, guide,
+                            resolution=resolution)
     try:
-        control_preview = regular_control(mask_image, meta, spacing, angle, curvature)
+        control_preview = regular_control(mask_image, meta, spacing, angle, curvature,
+                                          resolution=resolution)
     except ValueError as exc:
         raise gr.Error(str(exc))
     control_path = job/'control_preview.png'
@@ -291,7 +294,9 @@ def local_inpaint(source, editor, reference, spacing, angle, curvature, contrast
         ref = job / 'material_reference.png'
         Image.fromarray(np.uint8(image_pixels(reference))).save(ref)
         command += ['--reference', str(ref)]
-    lines = [f'本次仅修改整图的 {guide_report["masked_fraction"]:.2%}；白色蒙版外不修改。', '开始局部重绘；日志：'+str(job/'inpaint.log')]
+    lines = [f'本次仅修改整图的 {guide_report["masked_fraction"]:.2%}；白色蒙版外不修改。',
+             f'已根据线距自动选择 {resolution}×{resolution} 局部模型分辨率。',
+             '开始局部重绘；日志：'+str(job/'inpaint.log')]
     yield preview, '\n'.join(lines), None
     with (job/'inpaint.log').open('w',encoding='utf-8') as log:
         child = subprocess.Popen(command, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,

@@ -19,7 +19,7 @@ except ValueError: pass
 else: raise AssertionError('empty mask accepted')
 print('PASS: edge crops, square padding, exact outside-mask and alpha preservation, empty mask rejection')
 
-from run_local_inpaint import regular_control
+from run_local_inpaint import choose_model_resolution, regular_control
 m=Image.new('L',(256,256),255)
 _,_,_,meta=prepare(Image.new('RGB',m.size),m,Image.new('RGB',m.size),256,0)
 c=np.asarray(regular_control(m,meta,spacing=16,angle=0,curvature=0,resolution=256))[:,:,0]
@@ -30,3 +30,10 @@ try: regular_control(m,meta,spacing=1,resolution=256)
 except ValueError: pass
 else: raise AssertionError('undersampled lines accepted')
 print('PASS: analytic control periodicity and undersampling rejection')
+
+# A large selection that produced only 3.5 model pixels at 512 must adapt to
+# 640 rather than blocking the user.
+large=Image.new('L',(1600,1600),0)
+large.paste(255,(100,100,1463,1463))
+assert choose_model_resolution(large, 10) == 640
+print('PASS: adaptive resolution promotes a 3.5 px period to 640')

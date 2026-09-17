@@ -10,6 +10,18 @@ from PIL import Image, ImageFilter, ImageOps
 
 ROOT = Path(__file__).resolve().parent
 
+def choose_model_resolution(mask, spacing, padding=64, minimum=512, maximum=768):
+    """Choose the smallest 64-aligned canvas that keeps a strand period near 4 px."""
+    a = np.asarray(mask.convert('L')) > 25
+    ys, xs = np.where(a)
+    if len(xs) < 64:
+        raise ValueError('请先涂抹线材区域')
+    box = (max(0, int(xs.min())-padding), max(0, int(ys.min())-padding),
+           min(mask.width, int(xs.max())+1+padding), min(mask.height, int(ys.max())+1+padding))
+    side = max(box[2]-box[0], box[3]-box[1])
+    wanted = int(np.ceil((side * 4 / max(float(spacing), 1)) / 64) * 64)
+    return max(minimum, min(maximum, wanted))
+
 def prepare(source, mask, guide, resolution=512, padding=64):
     source = source.convert('RGBA')
     mask = mask.convert('L')
@@ -30,7 +42,7 @@ def prepare(source, mask, guide, resolution=512, padding=64):
     return (square(source.convert('RGB'),(127,127,127),Image.Resampling.LANCZOS),
             square(mask,0,Image.Resampling.NEAREST),
             square(guide.convert('RGB'),(127,127,127),Image.Resampling.LANCZOS),
-            {'box':box,'side':side,'offset':offset,'crop_size':size})
+            {'box':box,'side':side,'offset':offset,'crop_size':size,'resolution':resolution})
 
 def regular_control(mask, meta, spacing=10, angle=0, curvature=.35, resolution=512):
     """Analytic ridge contours in source coordinates; never trace old grooves."""
@@ -41,8 +53,8 @@ def regular_control(mask, meta, spacing=10, angle=0, curvature=.35, resolution=5
     cx, cy = (xs.min()+xs.max())/2, (ys.min()+ys.max())/2
     radius = max(1, xs.max()-xs.min(), ys.max()-ys.min())
     scale = meta['side']/resolution
-    if spacing/scale < 4:
-        raise ValueError(f'当前线距在模型中仅 {spacing/scale:.1f} 像素，请缩小选区或增大线距，至少达到 4 像素')
+    if spacing/scale < 2:
+        raise ValueError(f'自动提高到 {resolution} 像素后，线距仍只有 {spacing/scale:.1f} 像素，请增大线距')
     yy, xx = np.mgrid[:resolution,:resolution].astype(float)
     xx = (xx+.5)*scale + meta['box'][0]-meta['offset'][0]-.5-cx
     yy = (yy+.5)*scale + meta['box'][1]-meta['offset'][1]-.5-cy
@@ -119,8 +131,10 @@ def main():
     if not torch.cuda.is_available(): raise RuntimeError('CUDA GPU unavailable')
     source=ImageOps.exif_transpose(Image.open(args.source)).convert('RGBA')
     mask=Image.open(args.mask).convert('L'); guide=Image.open(args.guide).convert('RGB')
-    image,local_mask,local_guide,meta=prepare(source,mask,guide)
-    control=regular_control(mask,meta,args.spacing,args.angle,args.curvature)
+    resolution=choose_model_resolution(mask,args.spacing)
+    print(f'Adaptive inpaint resolution: {resolution}x{resolution}',flush=True)
+    image,local_mask,local_guide,meta=prepare(source,mask,guide,resolution=resolution)
+    control=regular_control(mask,meta,args.spacing,args.angle,args.curvature,resolution=resolution)
     # Initialize selected pixels from rebuilt ridges, not the irregular source.
     original_crop=image
     image=Image.composite(local_guide,image,local_mask)
@@ -140,7 +154,7 @@ def main():
     pipe.enable_model_cpu_offload(); pipe.enable_vae_tiling()
     def progress(pipe,step,timestep,kwargs):
         print(f'Inpaint step {step+1}',flush=True); return kwargs
-    result=pipe(prompt=args.prompt,negative_prompt='broken strands, tangled wires, crossed strands, text, lettering, objects, uneven thickness',image=image,mask_image=local_mask,control_image=control,width=512,height=512,strength=args.strength,controlnet_conditioning_scale=args.control,num_inference_steps=30,guidance_scale=5,generator=torch.Generator('cpu').manual_seed(args.seed),callback_on_step_end=progress,**extra)
+    result=pipe(prompt=args.prompt,negative_prompt='broken strands, tangled wires, crossed strands, text, lettering, objects, uneven thickness',image=image,mask_image=local_mask,control_image=control,width=resolution,height=resolution,strength=args.strength,controlnet_conditioning_scale=args.control,num_inference_steps=30,guidance_scale=5,generator=torch.Generator('cpu').manual_seed(args.seed),callback_on_step_end=progress,**extra)
     if result.nsfw_content_detected and any(result.nsfw_content_detected):
         raise RuntimeError('生成结果被模型过滤，请调整输入后重试')
     patch=result.images[0]; patch.save(args.output.parent/'generated_crop.png')
