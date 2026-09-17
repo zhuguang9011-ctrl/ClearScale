@@ -51,3 +51,19 @@ with tempfile.TemporaryDirectory() as directory:
             inference.assert_not_called()
         job.close()
 print("empty optional reference regression passed")
+
+# Local inpaint must finish all preprocessing and emit its first preview before
+# any GPU subprocess is created. This catches missing imports in that path.
+local_paint = np.zeros((24, 32, 4), dtype=np.uint8)
+local_paint[2:22, 4:28, 3] = 255
+local_editor = {"background": image, "layers": [local_paint], "composite": image}
+with tempfile.TemporaryDirectory() as directory:
+    with patch.object(app, "OUTPUTS", Path(directory)):
+        job = app.local_inpaint(image, local_editor, empty, 10, 0, .35, .12,
+                                .65, .8, .35, 42, "regular filament")
+        preview, status, download = next(job)
+        assert len(preview) == 3
+        assert "本次仅修改整图" in status
+        assert download is None
+        job.close()
+print("local inpaint preprocessing regression passed")
