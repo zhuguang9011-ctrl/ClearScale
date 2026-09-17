@@ -67,7 +67,8 @@ repo('https://github.com/Acly/krita-ai-diffusion','v1.53.0',CACHE/'plugin-source
 krita = fetch('https://download.kde.org/stable/krita/5.3.2.1/krita-x64-5.3.2.1.zip',CACHE/'krita.zip')
 extract(krita,OUT/'krita',strip=True)
 assert (OUT/'krita/bin/krita.exe').exists()
-fetch('https://invent.kde.org/graphics/krita/-/archive/v5.3.2.1/krita-v5.3.2.1.tar.gz',OUT/'sources/krita-5.3.2.1.tar.gz')
+# KDE publishes shared sources for the Qt5 and Qt6 builds under 6.0.2.1.
+fetch('https://download.kde.org/stable/krita/6.0.2.1/krita-6.0.2.1.tar.xz',OUT/'sources/krita-6.0.2.1.tar.xz')
 py = fetch('https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip',CACHE/'python.zip')
 extract(py,OUT/'python')
 (OUT/'python/python312._pth').write_text('python312.zip\n.\nLib/site-packages\n../ComfyUI\nimport site\n')
