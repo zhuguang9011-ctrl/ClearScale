@@ -96,7 +96,7 @@ with (OUT/'installed-packages.txt').open('w') as f:
 for model in json.loads((HERE/'models.json').read_text()):
     for entry in model['files']: fetch(entry['url'],comfy/entry['path'],entry.get('sha256'))
 shutil.copy2(HERE/'models.json',OUT/'models-manifest.json')
-for name in ('launch.py','START.cmd','使用说明.txt'): shutil.copy2(HERE/name,OUT/name)
+for name in ('launch.py','START.cmd','FIX-AI-PLUGIN.cmd','使用说明.txt'): shutil.copy2(HERE/name,OUT/name)
 shutil.copy2(HERE.parent/'THIRD-PARTY-LICENSE.txt',OUT/'PLUGIN-LICENSE.txt')
 # Preserve model cards alongside unmodified model weights.
 for slug in ['SG161222/RealVisXL_V5.0','h94/IP-Adapter','ByteDance/Hyper-SD','lllyasviel/fooocus_inpaint','Acly/Omni-SR']:

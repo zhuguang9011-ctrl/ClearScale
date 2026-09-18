@@ -13,8 +13,13 @@ def main():
     roaming=ROOT/'profile/Roaming'
     local=ROOT/'profile/Local'
     for p in (roaming/'krita',local,ROOT/'logs',ROOT/'outputs'): p.mkdir(parents=True,exist_ok=True)
-    dest=roaming/'krita/pykrita'
-    if not (dest/'ai_diffusion').exists(): shutil.copytree(ROOT/'plugin',dest,dirs_exist_ok=True)
+    # Install the plugin in both the isolated user resource directory and the
+    # bundled Krita resource directory.  Portable Krita builds can resolve
+    # either location depending on their resource-path initialization.
+    plugin_src=ROOT/'plugin'
+    for dest in (roaming/'krita/pykrita',ROOT/'krita/share/krita/pykrita'):
+        dest.mkdir(parents=True,exist_ok=True)
+        shutil.copytree(plugin_src,dest,dirs_exist_ok=True)
     # Isolated profile; never overwrite an existing Krita user's settings.
     for folder in (roaming,local):
         rc=folder/'kritarc'

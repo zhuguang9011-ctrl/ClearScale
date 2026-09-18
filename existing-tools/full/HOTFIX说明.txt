@@ -1,0 +1,12 @@
+AI 插件面板修复说明
+
+适用情况：Krita 的“设置 > 面板列表”和“Python 插件管理器”里没有 AI Image Diffusion。
+
+1. 完全关闭 Krita 和后台黑色窗口。
+2. 将本修复包内的 launch.py 与 FIX-AI-PLUGIN.cmd 复制到 Product-Editor-Full 根目录，选择覆盖 launch.py。
+3. 双击 FIX-AI-PLUGIN.cmd，看到 copied successfully 后按任意键关闭。
+4. 双击 START.cmd。
+5. 如 Python 插件管理器中已出现 AI Image Diffusion 但没有勾选，勾选并重启 START.cmd 一次。
+6. 在“设置 > 面板列表”中打开 AI Image Generation。
+
+本修复只复制完整版内已有的官方插件，不下载模型，也不改动图片。
