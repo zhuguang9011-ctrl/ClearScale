@@ -1,0 +1,19 @@
+name: Validate surface cleanup development
+on:
+  push:
+    branches: [development/surface-cleanup]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm test
+      - run: node --check src/main.js
+      - run: node --check src/renderer/renderer.js

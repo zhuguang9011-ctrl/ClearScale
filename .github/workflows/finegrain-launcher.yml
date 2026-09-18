@@ -2,12 +2,12 @@ name: Validate and package Finegrain launcher
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, development/surface-cleanup]
     paths: ['finegrain/**', '.github/workflows/finegrain-launcher.yml']
 permissions:
   contents: write
 concurrency:
-  group: finegrain-launcher
+  group: finegrain-launcher-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   package:
@@ -29,14 +29,30 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          Compress-Archive -Path finegrain/Start.cmd,finegrain/setup.ps1,finegrain/bootstrap.py,finegrain/smoke_test.py,finegrain/README.md -DestinationPath dist/Finegrain-Launcher-Windows.zip
+          Compress-Archive -Path finegrain/Start.cmd,finegrain/Verify.cmd,finegrain/Verify.ps1,finegrain/verify_result.py,finegrain/setup.ps1,finegrain/bootstrap.py,finegrain/smoke_test.py,finegrain/README.md -DestinationPath dist/Finegrain-Launcher-Windows.zip
           $hash = (Get-FileHash dist/Finegrain-Launcher-Windows.zip -Algorithm SHA256).Hash
           "$hash  Finegrain-Launcher-Windows.zip" | Set-Content dist/SHA256SUMS.txt
+      - name: Verify result serialization with actual Gradio API
+        shell: powershell
+        run: ./finegrain/runtime/venv/Scripts/python.exe ./finegrain/test_preview.py
+      - name: Verify local evidence report
+        shell: powershell
+        run: ./finegrain/runtime/venv/Scripts/python.exe ./finegrain/test_verify_result.py
+      - name: Verify actual preview loading in Edge
+        shell: powershell
+        env:
+          CLEARSCALE_BROWSER_CHANNEL: msedge
+          GRADIO_ANALYTICS_ENABLED: 'False'
+        run: |
+          ./finegrain/runtime/uv.exe pip install --python ./finegrain/runtime/venv/Scripts/python.exe playwright==1.58.0
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./finegrain/runtime/venv/Scripts/python.exe ./finegrain/test_preview_browser.py
       - uses: actions/upload-artifact@v4
         with:
           name: Finegrain-Launcher-Windows
           path: dist/*
       - uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
         with:
           tag_name: finegrain-launcher-v0.1.0
           target_commitish: ${{ github.sha }}

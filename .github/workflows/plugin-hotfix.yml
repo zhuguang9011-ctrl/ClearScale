@@ -1,0 +1,32 @@
+name: Publish portable Krita AI plugin hotfix
+on:
+  push:
+    branches: [development/surface-cleanup]
+    paths:
+      - 'existing-tools/full/launch.py'
+      - 'existing-tools/full/FIX-AI-PLUGIN.cmd'
+      - 'existing-tools/full/HOTFIX说明.txt'
+      - '.github/workflows/plugin-hotfix.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build small overlay repair package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path hotfix -Force | Out-Null
+          Copy-Item existing-tools/full/launch.py hotfix/launch.py
+          Copy-Item existing-tools/full/FIX-AI-PLUGIN.cmd hotfix/FIX-AI-PLUGIN.cmd
+          Copy-Item existing-tools/full/HOTFIX说明.txt hotfix/HOTFIX说明.txt
+          Compress-Archive -Path hotfix/* -DestinationPath Product-Editor-AI-Plugin-Hotfix.zip -CompressionLevel Optimal
+      - name: Publish repair download
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "ai-plugin-hotfix-$env:GITHUB_RUN_ID"
+          gh release create $tag Product-Editor-AI-Plugin-Hotfix.zip --target $env:GITHUB_SHA --title "AI 插件面板修复包" --notes "用于修复便携版 Krita 中找不到 AI Image Diffusion。下载 ZIP，解压到 Product-Editor-Full 根目录并覆盖 launch.py，然后双击 FIX-AI-PLUGIN.cmd。无需重新下载 17 个分卷。"

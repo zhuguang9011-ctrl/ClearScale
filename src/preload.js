@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('clearScale', {
+  surface: payload => ipcRenderer.invoke('surface:start', payload),
   refineStatus: () => ipcRenderer.invoke('refine:status'),
   refine: payload => ipcRenderer.invoke('refine:start', payload),
   chooseImages: () => ipcRenderer.invoke('images:choose'),

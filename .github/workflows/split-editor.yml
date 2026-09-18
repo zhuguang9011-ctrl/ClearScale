@@ -1,0 +1,40 @@
+name: Split full editor download
+on:
+  push:
+    branches: [development/surface-cleanup]
+    paths: ['distribution/split.py', '.github/workflows/split-editor.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  split:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download exact previously validated artifact
+        shell: pwsh
+        run: |
+          curl.exe --fail --location --retry 3 -H "Authorization: Bearer $env:GH_TOKEN" "https://api.github.com/repos/zhuguang9011-ctrl/ClearScale/actions/artifacts/10485561294/zip" -o full.zip
+          if ($LASTEXITCODE -ne 0) { throw "Artifact download failed" }
+      - name: Split and verify every byte
+        run: python distribution/split.py
+      - name: Upload verified volumes and publish download page
+        shell: pwsh
+        run: |
+          $tag = "product-editor-full-split-$env:GITHUB_RUN_ID"
+          gh release create $tag --target $env:GITHUB_SHA --draft --prerelease --title "Product Editor 完整版 · 1GB分卷" --notes-file split-output/READ-ME.txt
+          if ($LASTEXITCODE -ne 0) { throw "Release creation failed" }
+          Get-ChildItem split-output -File | ForEach-Object {
+            gh release upload $tag $_.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Asset upload failed" }
+          }
+          gh release edit $tag --draft=false
+          if ($LASTEXITCODE -ne 0) { throw "Publish failed" }
